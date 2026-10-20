@@ -1,0 +1,13 @@
+{
+  "name": "@cliporbit/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@cliporbit/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "electron": "^35.0.0",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@cliporbit/database",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@prisma/client": "^6.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "prisma": "^6.4.1",
+    "typescript": "^5.8.2"
+  }
+}

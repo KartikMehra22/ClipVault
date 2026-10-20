@@ -1,0 +1,8 @@
+{
+  "name": "@cliporbit/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
