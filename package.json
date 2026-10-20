@@ -3,7 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "pnpm -r --parallel run typecheck",
+    "clean": "pnpm -r --parallel exec rm -rf dist build out .next .tsbuildinfo"
+  },
   "devDependencies": {
-    "typescript": "^5.8.2"
+    "@eslint/js": "^9.22.0",
+    "@next/eslint-plugin-next": "^16.4.2",
+    "eslint": "^9.22.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.26.0"
   }
 }

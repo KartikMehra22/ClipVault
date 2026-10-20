@@ -40,7 +40,7 @@ cliporbit/
 
 ## High-Level Roadmap
 
-- **Phase 1: Repository Scaffold & Configuration** *(Current)*
+- **Phase 1: Repository Scaffold & Configuration** _(Current)_
 - **Phase 2: Shared Contracts & Type Specifications**
 - **Phase 3: Local Persistence Layer (Prisma & SQLite)**
 - **Phase 4: Electron Native Desktop Integration & IPC Bridge**

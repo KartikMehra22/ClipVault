@@ -2,12 +2,15 @@
   "name": "@cliporbit/desktop",
   "version": "0.1.0",
   "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@cliporbit/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
-    "electron": "^35.0.0",
-    "typescript": "^5.8.2"
+    "electron": "^35.7.5",
+    "typescript": "^5.9.3"
   }
 }

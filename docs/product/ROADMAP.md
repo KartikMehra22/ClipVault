@@ -6,7 +6,8 @@
 
 ## Development Phases
 
-### Phase 1: Repository Scaffold & Configuration *(Current)*
+### Phase 1: Repository Scaffold & Configuration _(Current)_
+
 - Initialize pnpm monorepo workspace and package structure.
 - Define workspace packages (`apps/desktop`, `apps/renderer`, `apps/api`, `packages/contracts`, `packages/database`).
 - Establish TypeScript base configuration, linting foundations, and repository guidelines.
@@ -16,6 +17,7 @@
 ---
 
 ### Phase 2: Shared Contracts & Type Specifications
+
 - Define IPC contract specifications and type definitions in `packages/contracts/src/ipc/`.
 - Define remote synchronization data exchange types in `packages/contracts/src/sync/`.
 - Establish runtime validation schemas for inter-process messages.
@@ -24,6 +26,7 @@
 ---
 
 ### Phase 3: Local Database & Persistence Layer
+
 - Configure Prisma schema with SQLite provider in `packages/database`.
 - Define data models for clipboard history, snippets, pins, categories, and application settings.
 - Implement database client initialization, migrations, and access repositories.
@@ -32,6 +35,7 @@
 ---
 
 ### Phase 4: Electron Native Desktop Integration & IPC Bridge
+
 - Implement Electron main process lifecycle, window manager, and system tray.
 - Implement native clipboard monitoring service and global hotkey bindings.
 - Implement secure, restricted preload script using `contextBridge`.
@@ -41,6 +45,7 @@
 ---
 
 ### Phase 5: Renderer UI & Desktop Experience
+
 - Configure Next.js application shell with React and Tailwind/vanilla CSS.
 - Build clipboard history feed with real-time updates and search indexing.
 - Build snippet management, categorization, pinning, and keyboard navigation.
@@ -50,6 +55,7 @@
 ---
 
 ### Phase 6: Privacy Controls, Content Filtering & Local Encryption
+
 - Implement sensitive-content detection (passwords, tokens, API keys, credit cards).
 - Add application exclusion rules (e.g., ignore 1Password, Bitwarden, KeePass).
 - Implement local encryption at rest for sensitive clipboard items.
@@ -59,6 +65,7 @@
 ---
 
 ### Phase 7: Optional Remote Synchronization Service
+
 - Implement Express REST / WebSocket server in `apps/api` with PostgreSQL persistence.
 - Implement client authentication, device registration, and end-to-end encrypted payload synchronization.
 - Implement conflict-free synchronization log and revision handling.

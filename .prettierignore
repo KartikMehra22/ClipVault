@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Generated locks
+pnpm-lock.yaml
+
+# Build & distribution outputs
+dist/
+build/
+out/
+.next/
+coverage/
+.nyc_output/
+
+# TypeScript artifacts
+*.tsbuildinfo
+next-env.d.ts
+
+# SQLite files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+
+# OS & Git
+.git/
+.DS_Store
