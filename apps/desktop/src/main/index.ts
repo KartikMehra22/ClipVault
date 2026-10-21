@@ -1,9 +1,12 @@
-import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import path from 'path';
 import { IPC_CHANNELS, type DesktopInfo } from '@cliporbit/contracts';
 import { isAuthorizedFrame } from './security';
+import { initializeDatabase, closeDatabase } from '../services/database';
 
 let mainWindow: BrowserWindow | null = null;
+let isDatabaseClosed = false;
+let isShuttingDown = false;
 
 const isDev = !app.isPackaged;
 const RENDERER_URL = process.env.RENDERER_URL || 'http://127.0.0.1:3000';
@@ -127,9 +130,32 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     console.log('[ClipOrbit Main] Electron app ready event received.');
     registerIpcHandlers();
+
+    try {
+      console.log('[ClipOrbit Main] Initializing local SQLite database...');
+      const dbResult = await initializeDatabase();
+      console.log(
+        `[ClipOrbit Main] Runtime database initialized and verified at: ${dbResult.paths.dbFilePath}`,
+      );
+      if (dbResult.migrationSummary) {
+        console.log(`[ClipOrbit Main] Migration summary:\n${dbResult.migrationSummary}`);
+      }
+    } catch (dbError) {
+      const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
+      console.error('[ClipOrbit Main] Fatal: Database initialization failed:', errorMessage);
+
+      dialog.showErrorBox(
+        'ClipOrbit — Database Initialization Error',
+        `Failed to initialize or migrate the local database.\n\n${errorMessage}\n\nThe application will now quit.`,
+      );
+
+      app.quit();
+      return;
+    }
+
     createWindow();
 
     app.on('activate', () => {
@@ -138,6 +164,32 @@ if (!gotSingleInstanceLock) {
         createWindow();
       }
     });
+  });
+
+  app.on('before-quit', (event) => {
+    if (isDatabaseClosed) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (isShuttingDown) {
+      return;
+    }
+    isShuttingDown = true;
+
+    console.log('[ClipOrbit Main] Closing runtime database before quit...');
+    closeDatabase()
+      .then(() => {
+        console.log('[ClipOrbit Main] Runtime database disconnected cleanly.');
+      })
+      .catch((err) => {
+        console.error('[ClipOrbit Main] Error disconnecting database on quit:', err);
+      })
+      .finally(() => {
+        isDatabaseClosed = true;
+        app.quit();
+      });
   });
 
   app.on('window-all-closed', () => {

@@ -66,6 +66,9 @@ importers:
       '@cliporbit/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cliporbit/database':
+        specifier: workspace:*
+        version: link:../../packages/database
     devDependencies:
       '@types/node':
         specifier: ^22.13.9
