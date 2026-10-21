@@ -21,7 +21,7 @@ export const Header: FC<HeaderProps> = ({
       case 'history':
         return {
           title: 'Clipboard History',
-          subtitle: 'Demonstration clips captured in memory',
+          subtitle: 'In-memory live clipboard session',
           showSearch: true,
         };
       case 'pinned':

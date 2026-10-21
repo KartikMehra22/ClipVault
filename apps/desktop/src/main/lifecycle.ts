@@ -39,6 +39,8 @@ export interface LifecycleCoordinatorDependencies {
   initializeEncryption: (options?: EncryptionServiceInitOptions) => Promise<unknown>;
   /** Disposes the encryption service and zeroes in-memory key material. */
   disposeEncryption: () => void;
+  /** Disposes the clipboard capture service, stopping polling and purging in-memory entries. */
+  disposeClipboard?: () => void;
   /** Creates the main application BrowserWindow. */
   createWindow: () => unknown;
   /** Displays a native error dialog box. */
@@ -240,7 +242,22 @@ export class LifecycleCoordinator {
     this.shutdownInProgress = true;
     this.dependencies.log?.('[ClipOrbit Lifecycle] Shutdown initiated. Disposing resources...');
 
-    // 1. Dispose encryption service first to clear secret material from memory
+    // 1. Dispose clipboard capture service first to cease polling and clear in-memory history
+    if (this.dependencies.disposeClipboard) {
+      try {
+        this.dependencies.disposeClipboard();
+        this.dependencies.log?.(
+          '[ClipOrbit Lifecycle] Clipboard capture service disposed cleanly.',
+        );
+      } catch (err) {
+        this.dependencies.logError?.(
+          '[ClipOrbit Lifecycle] Error disposing clipboard capture service:',
+          err,
+        );
+      }
+    }
+
+    // 2. Dispose encryption service to clear secret material from memory
     try {
       this.dependencies.disposeEncryption();
       this.isEncryptionReady = false;
@@ -252,7 +269,7 @@ export class LifecycleCoordinator {
       );
     }
 
-    // 2. Disconnect runtime database
+    // 3. Disconnect runtime database
     try {
       await this.dependencies.closeDatabase();
       this.isDatabaseReady = false;
@@ -269,6 +286,14 @@ export class LifecycleCoordinator {
    * Internal helper to clean up resources during startup failure.
    */
   private async cleanupResources(): Promise<void> {
+    if (this.dependencies.disposeClipboard) {
+      try {
+        this.dependencies.disposeClipboard();
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+
     try {
       this.dependencies.disposeEncryption();
       this.isEncryptionReady = false;

@@ -4,7 +4,9 @@ import { IPC_CHANNELS, type DesktopInfo } from '@cliporbit/contracts';
 import { isAuthorizedFrame } from './security';
 import { initializeDatabase, closeDatabase } from '../services/database';
 import { initializeEncryptionService, disposeEncryptionService } from '../services/crypto';
+import { disposeClipboardCaptureService } from '../services/clipboard';
 import { LifecycleCoordinator, type AppReadinessStatus } from './lifecycle';
+import { registerClipboardIpcHandlers } from './clipboardIpc';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -53,6 +55,11 @@ function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
  */
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.APP_GET_DESKTOP_INFO, handleGetDesktopInfo);
+  registerClipboardIpcHandlers({
+    isAuthorized: isAuthorizedSender,
+    isShutdown: () =>
+      lifecycleCoordinator.isShutdownInProgress() || lifecycleCoordinator.isShutdownCompleted(),
+  });
   console.log('[ClipOrbit Main] Registered secure IPC handlers.');
 }
 
@@ -142,6 +149,9 @@ const lifecycleCoordinator = new LifecycleCoordinator({
   },
   disposeEncryption: () => {
     disposeEncryptionService();
+  },
+  disposeClipboard: () => {
+    disposeClipboardCaptureService();
   },
   createWindow: () => createWindow(),
   showErrorBox: (title, content) => dialog.showErrorBox(title, content),

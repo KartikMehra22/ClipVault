@@ -535,6 +535,209 @@ body {
 }
 
 /* ==========================================================================
+   Live Capture Controls & Status Banner
+   ========================================================================== */
+
+.capture-control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.85rem;
+  gap: 0.75rem;
+}
+
+.capture-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.capture-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius-xs);
+}
+
+.capture-status-pill-active {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.capture-status-pill-paused {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.capture-status-pill-stopped {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.capture-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.capture-dot-active {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+.capture-dot-paused {
+  background-color: #f59e0b;
+}
+
+.capture-dot-stopped {
+  background-color: #64748b;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+}
+
+.capture-meta-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.capture-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.capture-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.capture-btn-primary {
+  background-color: var(--accent-primary);
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+
+.capture-btn-primary:hover {
+  background-color: var(--accent-hover);
+}
+
+.capture-btn-secondary {
+  background-color: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+
+.capture-btn-secondary:hover {
+  background-color: var(--bg-surface-active);
+  color: var(--text-primary);
+  border-color: var(--border-moderate);
+}
+
+.capture-btn-danger {
+  background-color: transparent;
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
+}
+
+.capture-btn-danger:hover {
+  background-color: rgba(244, 63, 94, 0.1);
+  color: var(--color-danger);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.capture-inactive-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 1.75rem;
+  text-align: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.capture-inactive-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-primary);
+}
+
+.capture-inactive-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.capture-inactive-desc {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 480px;
+}
+
+.capture-notice-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background-color: rgba(245, 158, 11, 0.08);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.75rem;
+  color: #fbbf24;
+  line-height: 1.4;
+  text-align: left;
+  max-width: 520px;
+}
+
+.capture-notice-text {
+  flex: 1;
+}
+
+.capture-notice-title {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+/* ==========================================================================
    Clipboard Item Card
    ========================================================================== */
 

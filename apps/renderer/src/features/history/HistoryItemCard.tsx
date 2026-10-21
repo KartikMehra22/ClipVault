@@ -96,7 +96,7 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
 
           {isSensitive && (
             <Badge variant="warning" size="sm" icon={<LockIcon size={11} />}>
-              Demonstration Secret
+              Sensitive
             </Badge>
           )}
         </div>
@@ -110,18 +110,18 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
             onClick={() => onTogglePin(item.id)}
             className={`clip-action-btn ${item.isPinned ? 'clip-action-pinned' : ''}`}
             aria-label={item.isPinned ? 'Unpin this clip' : 'Pin this clip'}
-            title={item.isPinned ? 'Unpin' : 'Pin to top'}
+            title={item.isPinned ? 'Unpin' : 'Pin for this session'}
           >
             <PinIcon size={14} filled={item.isPinned} />
           </button>
 
-          {/* Copy Demo Button */}
+          {/* Copy Button (Disabled in capture-only engine phase) */}
           <button
             type="button"
             disabled
             className="clip-action-btn clip-action-disabled"
-            aria-label="Copy mock clip (Disabled in Phase 4.1 demonstration)"
-            title="Native clipboard write is disabled in demo mode"
+            aria-label="Clipboard write is disabled in this capture-only phase"
+            title="Writing back to clipboard is disabled in Phase 5.2 (capture-only)"
           >
             <CopyIcon size={14} />
           </button>
@@ -131,8 +131,8 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
             type="button"
             onClick={() => onDelete(item.id)}
             className="clip-action-btn clip-action-delete"
-            aria-label="Remove mock clip"
-            title="Delete clip"
+            aria-label="Remove clip from session"
+            title="Remove from session"
           >
             <TrashIcon size={14} />
           </button>
@@ -143,9 +143,7 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
       {isSensitive && (
         <div className="clip-sensitive-notice">
           <LockIcon size={12} />
-          <span>
-            Fabricated mock secret — {item.metadata?.sensitiveReason || 'Sensitive token detected'}.
-          </span>
+          <span>{item.metadata?.sensitiveReason || 'Sensitive content detected'}</span>
           <button
             type="button"
             onClick={() => setIsRevealed(!isRevealed)}

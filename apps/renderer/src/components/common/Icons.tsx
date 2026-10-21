@@ -452,3 +452,58 @@ export const CheckIcon: FC<IconProps> = ({ size = 14, className, ...props }) => 
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
+
+export const PlayIcon: FC<IconProps> = ({ size = 14, className, ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+    {...props}
+  >
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+);
+
+export const PauseIcon: FC<IconProps> = ({ size = 14, className, ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+    {...props}
+  >
+    <rect x="6" y="4" width="4" height="16" rx="1" />
+    <rect x="14" y="4" width="4" height="16" rx="1" />
+  </svg>
+);
+
+export const StopIcon: FC<IconProps> = ({ size = 14, className, ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+    {...props}
+  >
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+  </svg>
+);
