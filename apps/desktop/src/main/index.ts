@@ -3,10 +3,10 @@ import path from 'path';
 import { IPC_CHANNELS, type DesktopInfo } from '@cliporbit/contracts';
 import { isAuthorizedFrame } from './security';
 import { initializeDatabase, closeDatabase } from '../services/database';
+import { initializeEncryptionService, disposeEncryptionService } from '../services/crypto';
+import { LifecycleCoordinator, type AppReadinessStatus } from './lifecycle';
 
 let mainWindow: BrowserWindow | null = null;
-let isDatabaseClosed = false;
-let isShuttingDown = false;
 
 const isDev = !app.isPackaged;
 const RENDERER_URL = process.env.RENDERER_URL || 'http://127.0.0.1:3000';
@@ -115,6 +115,48 @@ function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
+/**
+ * Global lifecycle coordinator configured with runtime database, encryption,
+ * and Electron window dependencies.
+ */
+const lifecycleCoordinator = new LifecycleCoordinator({
+  initializeDatabase: async () => {
+    const dbResult = await initializeDatabase();
+    console.log(
+      `[ClipOrbit Main] Runtime database initialized and verified at: ${dbResult.paths.dbFilePath}`,
+    );
+    if (dbResult.migrationSummary) {
+      console.log(`[ClipOrbit Main] Migration summary:\n${dbResult.migrationSummary}`);
+    }
+    return dbResult;
+  },
+  closeDatabase: async () => {
+    await closeDatabase();
+  },
+  initializeEncryption: async () => {
+    const encResult = await initializeEncryptionService();
+    console.log(
+      `[ClipOrbit Main] Local encryption service initialized. Master key stored at: ${encResult.masterKeyPath}`,
+    );
+    return encResult;
+  },
+  disposeEncryption: () => {
+    disposeEncryptionService();
+  },
+  createWindow: () => createWindow(),
+  showErrorBox: (title, content) => dialog.showErrorBox(title, content),
+  quitApp: () => app.quit(),
+  log: (msg) => console.log(msg),
+  logError: (msg, err) => console.error(msg, err),
+});
+
+/**
+ * Returns non-secret readiness status for internal diagnostics.
+ */
+function getReadinessStatus(): AppReadinessStatus {
+  return lifecycleCoordinator.getStatus();
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -134,60 +176,45 @@ if (!gotSingleInstanceLock) {
     console.log('[ClipOrbit Main] Electron app ready event received.');
     registerIpcHandlers();
 
-    try {
-      console.log('[ClipOrbit Main] Initializing local SQLite database...');
-      const dbResult = await initializeDatabase();
-      console.log(
-        `[ClipOrbit Main] Runtime database initialized and verified at: ${dbResult.paths.dbFilePath}`,
-      );
-      if (dbResult.migrationSummary) {
-        console.log(`[ClipOrbit Main] Migration summary:\n${dbResult.migrationSummary}`);
-      }
-    } catch (dbError) {
-      const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
-      console.error('[ClipOrbit Main] Fatal: Database initialization failed:', errorMessage);
-
-      dialog.showErrorBox(
-        'ClipOrbit — Database Initialization Error',
-        `Failed to initialize or migrate the local database.\n\n${errorMessage}\n\nThe application will now quit.`,
-      );
-
-      app.quit();
+    // Execute orderly startup: DB -> Encryption -> Window
+    const startupSuccess = await lifecycleCoordinator.startup();
+    if (!startupSuccess) {
+      console.warn('[ClipOrbit Main] Startup sequence aborted due to initialization failure.');
       return;
     }
 
-    createWindow();
-
     app.on('activate', () => {
       console.log('[ClipOrbit Main] macOS application activate event received.');
-      if (BrowserWindow.getAllWindows().length === 0) {
+      if (
+        BrowserWindow.getAllWindows().length === 0 &&
+        lifecycleCoordinator.getStatus().isFullyReady
+      ) {
         createWindow();
       }
     });
   });
 
   app.on('before-quit', (event) => {
-    if (isDatabaseClosed) {
+    if (lifecycleCoordinator.isShutdownCompleted()) {
       return;
     }
 
     event.preventDefault();
 
-    if (isShuttingDown) {
+    if (lifecycleCoordinator.isShutdownInProgress()) {
       return;
     }
-    isShuttingDown = true;
 
-    console.log('[ClipOrbit Main] Closing runtime database before quit...');
-    closeDatabase()
+    console.log('[ClipOrbit Main] Graceful shutdown sequence initiated...');
+    lifecycleCoordinator
+      .shutdown()
       .then(() => {
-        console.log('[ClipOrbit Main] Runtime database disconnected cleanly.');
+        console.log('[ClipOrbit Main] Graceful shutdown completed cleanly.');
       })
       .catch((err) => {
-        console.error('[ClipOrbit Main] Error disconnecting database on quit:', err);
+        console.error('[ClipOrbit Main] Error during shutdown:', err);
       })
       .finally(() => {
-        isDatabaseClosed = true;
         app.quit();
       });
   });
@@ -200,4 +227,4 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-export { isAuthorizedSender, handleGetDesktopInfo };
+export { isAuthorizedSender, handleGetDesktopInfo, lifecycleCoordinator, getReadinessStatus };
