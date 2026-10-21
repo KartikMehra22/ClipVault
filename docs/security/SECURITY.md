@@ -45,3 +45,21 @@ ClipOrbit operates on sensitive user data (clipboard contents, code snippets, cr
 1. **Never bypass IPC validation**: Every IPC message payload must be validated before execution in the main process.
 2. **Never expose secrets**: Secrets, tokens, and encryption keys must never be logged or transmitted in unencrypted IPC messages.
 3. **Keep dependencies minimal**: Avoid external dependencies in the desktop main process and preload bridge to minimize supply-chain surface area.
+4. **Never store plaintext clipboard payloads**: The database schema strictly prohibits plaintext content columns. All clipboard contents and snippets must be encrypted prior to database insertion.
+
+---
+
+## 4. Database Schema Privacy Architecture
+
+Phase 4.2 establishes the local database schema with defensive security constraints:
+
+### 4.1 Plaintext Column Prohibition
+
+The `Clip` and `Snippet` tables explicitly define `encrypted_payload` and `encrypted_content` BLOB columns alongside `encryption_nonce`, `encryption_auth_tag`, and `encryption_version`. No raw text, unencrypted previews, or plaintext payload fields are defined in the schema.
+
+### 4.2 Cryptographic Boundaries
+
+- **Payload Encryption**: Actual authenticated encryption (AES-256-GCM / XChaCha20-Poly1305) will be implemented in a subsequent phase. In Phase 4.2, no cryptographic engine is active; persistent data is not yet protected.
+- **Database Metadata**: In SQLite, metadata columns (`content_type`, `source_app`, `payload_byte_length`, `created_at`, `pinned_at`, `expires_at`, `is_sensitive`) are unencrypted and visible to anyone inspecting the SQLite file.
+- **Full-Database Encryption vs. Envelope Encryption**: Column-level encryption protects payload contents but does not encrypt SQLite database file headers, table catalogs, or index trees. Full-database encryption is distinct from column-level envelope encryption.
+- **AppSetting Separation**: The `app_settings` table is reserved strictly for non-secret user preferences. Encryption master keys, derived tokens, and passwords must never be stored in this table.

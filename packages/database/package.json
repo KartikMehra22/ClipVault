@@ -2,7 +2,22 @@
   "name": "@cliporbit/database",
   "version": "0.1.0",
   "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
+    "build": "prisma generate && tsc",
+    "db:format": "prisma format",
+    "db:generate": "prisma generate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:status": "prisma migrate status",
+    "db:validate": "prisma validate",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

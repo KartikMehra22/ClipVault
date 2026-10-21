@@ -1,0 +1,80 @@
+// ClipOrbit — Local Database Schema (Prisma 6 + SQLite)
+// Phase 4.2: Local Database Schema and Migration Foundation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Represents a local clipboard history entry.
+///
+/// PRIVACY AND SECURITY REQUIREMENT:
+/// Raw clipboard text, plaintext previews, or unencrypted payloads MUST NEVER
+/// be stored in this table. All clipboard payloads are encrypted at the
+/// application service boundary using authenticated encryption (e.g. AES-256-GCM
+/// or XChaCha20-Poly1305) prior to database persistence.
+model Clip {
+  id                String    @id @default(uuid())
+  contentType       String    @map("content_type")
+  encryptedPayload  Bytes     @map("encrypted_payload")
+  encryptionNonce   Bytes     @map("encryption_nonce")
+  encryptionAuthTag Bytes?    @map("encryption_auth_tag")
+  encryptionVersion Int       @default(1) @map("encryption_version")
+  payloadByteLength Int       @map("payload_byte_length")
+  sourceApp         String?   @map("source_app")
+  isSensitive       Boolean   @default(false) @map("is_sensitive")
+  pinnedAt          DateTime? @map("pinned_at")
+  expiresAt         DateTime? @map("expires_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([createdAt])
+  @@index([pinnedAt])
+  @@index([expiresAt])
+  @@index([contentType])
+  @@index([pinnedAt, createdAt])
+  @@map("clips")
+}
+
+/// Represents a reusable saved snippet.
+///
+/// Snippet content is encrypted at the application service boundary prior
+/// to persistence. Plaintext snippet bodies must not be written to disk.
+model Snippet {
+  id                String   @id @default(uuid())
+  title             String
+  description       String?
+  language          String?
+  encryptedContent  Bytes    @map("encrypted_content")
+  encryptionNonce   Bytes    @map("encryption_nonce")
+  encryptionAuthTag Bytes?   @map("encryption_auth_tag")
+  encryptionVersion Int      @default(1) @map("encryption_version")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([title])
+  @@index([language])
+  @@index([createdAt])
+  @@map("snippets")
+}
+
+/// Represents non-secret application configuration settings and preferences.
+///
+/// CAUTION:
+/// This table is STRICTLY for non-sensitive configuration values (such as UI
+/// themes, history retention duration, launch behaviors).
+///
+/// It MUST NEVER be used to store encryption master keys, derived keys,
+/// user credentials, tokens, or unencrypted clipboard contents.
+model AppSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
