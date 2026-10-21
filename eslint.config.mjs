@@ -49,7 +49,7 @@ export default tseslint.config(
       'scripts/**/*.{js,mjs,ts}',
       'apps/desktop/**/*.{js,mjs,ts}',
       'apps/api/**/*.{js,ts}',
-      'packages/database/**/*.{js,ts}',
+      'packages/database/**/*.{js,mjs,ts}',
     ],
     languageOptions: {
       globals: {
