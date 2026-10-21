@@ -1,8 +1,19 @@
-/**
- * ClipOrbit Desktop Preload Script
- *
- * Secure preload bridge running in a context-isolated, sandboxed environment.
- * In Phase 3.1, no APIs or IPC handlers are exposed to the renderer window.
- */
+import { contextBridge, ipcRenderer } from 'electron';
+import type { DesktopBridge, DesktopInfo } from '@cliporbit/contracts';
 
-console.log('[ClipOrbit Preload] Preload script initialized in sandboxed context.');
+// In sandboxed preload, keep imports type-only to avoid runtime node_modules resolution
+const DESKTOP_INFO_CHANNEL = 'app:get-desktop-info';
+
+const desktopBridge: DesktopBridge = {
+  getDesktopInfo: async (): Promise<DesktopInfo> => {
+    try {
+      const info = (await ipcRenderer.invoke(DESKTOP_INFO_CHANNEL)) as DesktopInfo;
+      return info;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to retrieve desktop info from main process:', err);
+      throw err;
+    }
+  },
+};
+
+contextBridge.exposeInMainWorld('clipOrbit', desktopBridge);

@@ -104,16 +104,66 @@ body {
 .status-indicator {
   width: 8px;
   height: 8px;
-  background-color: #10b981;
   border-radius: 50%;
-  box-shadow: 0 0 10px #10b981;
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.status-online {
+  background-color: #10b981;
+  box-shadow: 0 0 10px #10b981;
+}
+
+.status-pending {
+  background-color: #f59e0b;
+  box-shadow: 0 0 10px #f59e0b;
+}
+
+.status-offline {
+  background-color: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
 }
 
 .status-text {
   font-size: 0.875rem;
   font-weight: 500;
   color: #cbd5e1;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 1.25rem;
+  text-align: left;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.info-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
+.info-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.info-highlight {
+  color: #38bdf8;
 }
 
 @keyframes pulse {

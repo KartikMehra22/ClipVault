@@ -1,10 +1,90 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import path from 'path';
+import { IPC_CHANNELS, type DesktopInfo } from '@cliporbit/contracts';
 
 let mainWindow: BrowserWindow | null = null;
 
 const isDev = !app.isPackaged;
 const RENDERER_URL = process.env.RENDERER_URL || 'http://127.0.0.1:3000';
+const ALLOWED_RENDERER_ORIGIN = 'http://127.0.0.1:3000';
+
+app.name = 'ClipOrbit';
+
+/**
+ * Validates that an incoming IPC invocation originates strictly from the authorized renderer.
+ * Rejects calls from unexpected origins or unauthorized frames (such as iframes).
+ */
+function isAuthorizedSender(event: IpcMainInvokeEvent): boolean {
+  const frame = event.senderFrame;
+  if (!frame) {
+    return false;
+  }
+
+  // Reject child frames / iframes to ensure only the top-level trusted frame executes IPC
+  if (frame.parent !== null) {
+    return false;
+  }
+
+  try {
+    const frameOrigin = new URL(frame.url).origin;
+    const expectedOrigin = new URL(ALLOWED_RENDERER_ORIGIN).origin;
+    return frameOrigin === expectedOrigin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Handler for desktop information request.
+ * Strictly returns the application name, version and operating system platform.
+ */
+function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
+  if (!isAuthorizedSender(event)) {
+    console.warn(
+      '[ClipOrbit Main] Security Warning: Rejected unauthorized IPC request from sender URL:',
+      event.senderFrame?.url || '<unknown>',
+    );
+    throw new Error('Unauthorized IPC sender origin or frame.');
+  }
+
+  const info: DesktopInfo = {
+    appName: app.name || 'ClipOrbit',
+    appVersion: app.getVersion() || '0.1.0',
+    platform: process.platform,
+  };
+
+  console.log(
+    `[ClipOrbit Main] Authorized IPC request handled successfully from ${event.senderFrame?.url}:`,
+    JSON.stringify(info),
+  );
+
+  return info;
+}
+
+/**
+ * Registers all secure IPC handlers prior to window creation.
+ */
+function registerIpcHandlers(): void {
+  // Register contract-defined channel and alias 'app'
+  ipcMain.handle(IPC_CHANNELS.APP_GET_DESKTOP_INFO, handleGetDesktopInfo);
+  ipcMain.handle('app', handleGetDesktopInfo);
+  console.log('[ClipOrbit Main] Registered secure IPC handlers.');
+
+  // Programmatic verification of sender validation security
+  const mockUnauthorizedOrigin = {
+    senderFrame: { url: 'https://unauthorized-domain.com/attack', parent: null },
+  } as unknown as IpcMainInvokeEvent;
+  const mockUnauthorizedIframe = {
+    senderFrame: { url: 'http://127.0.0.1:3000', parent: {} },
+  } as unknown as IpcMainInvokeEvent;
+
+  const originRejected = !isAuthorizedSender(mockUnauthorizedOrigin);
+  const iframeRejected = !isAuthorizedSender(mockUnauthorizedIframe);
+
+  console.log(
+    `[ClipOrbit Security Verification] Unauthorized origin rejected: ${originRejected}, unauthorized iframe rejected: ${iframeRejected}`,
+  );
+}
 
 function createWindow(): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -39,17 +119,22 @@ function createWindow(): BrowserWindow {
   mainWindow.webContents.on('did-finish-load', async () => {
     console.log('[ClipOrbit Main] Renderer page finished loading successfully.');
 
-    // Programmatic verification of secure renderer environment
+    // Programmatic verification of secure renderer environment and IPC round-trip
     try {
       const securityStatus = await mainWindow?.webContents.executeJavaScript(
-        '({ hasProcess: typeof window.process !== "undefined", hasRequire: typeof window.require !== "undefined", title: document.title })',
+        '({ hasProcess: typeof window.process !== "undefined", hasRequire: typeof window.require !== "undefined", title: document.title, hasBridge: typeof window.clipOrbit !== "undefined" })',
       );
       console.log(
         '[ClipOrbit Security Check] Sandbox isolation verification:',
         JSON.stringify(securityStatus),
       );
+
+      const roundTripInfo = await mainWindow?.webContents.executeJavaScript(
+        'window.clipOrbit.getDesktopInfo()',
+      );
+      console.log('[ClipOrbit IPC Round-Trip Verification]:', JSON.stringify(roundTripInfo));
     } catch (err) {
-      console.error('[ClipOrbit Security Check] Failed to execute security probe:', err);
+      console.error('[ClipOrbit Security Check] Verification probe encountered an error:', err);
     }
   });
 
@@ -95,6 +180,8 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     console.log('[ClipOrbit Main] Electron app ready event received.');
+    // Register IPC handlers after app readiness but before creating the BrowserWindow
+    registerIpcHandlers();
     createWindow();
 
     app.on('activate', () => {
@@ -112,3 +199,5 @@ if (!gotSingleInstanceLock) {
     }
   });
 }
+
+export { isAuthorizedSender, handleGetDesktopInfo };
