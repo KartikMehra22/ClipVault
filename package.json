@@ -12,7 +12,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "pnpm -r --parallel run typecheck",
+    "typecheck": "node scripts/typecheck.mjs",
     "clean": "pnpm -r --parallel exec rm -rf dist build out .next .tsbuildinfo"
   },
   "devDependencies": {
