@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import path from 'path';
 import { IPC_CHANNELS, type DesktopInfo } from '@cliporbit/contracts';
+import { isAuthorizedFrame } from './security';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -12,26 +13,9 @@ app.name = 'ClipOrbit';
 
 /**
  * Validates that an incoming IPC invocation originates strictly from the authorized renderer.
- * Rejects calls from unexpected origins or unauthorized frames (such as iframes).
  */
 function isAuthorizedSender(event: IpcMainInvokeEvent): boolean {
-  const frame = event.senderFrame;
-  if (!frame) {
-    return false;
-  }
-
-  // Reject child frames / iframes to ensure only the top-level trusted frame executes IPC
-  if (frame.parent !== null) {
-    return false;
-  }
-
-  try {
-    const frameOrigin = new URL(frame.url).origin;
-    const expectedOrigin = new URL(ALLOWED_RENDERER_ORIGIN).origin;
-    return frameOrigin === expectedOrigin;
-  } catch {
-    return false;
-  }
+  return isAuthorizedFrame(event.senderFrame, ALLOWED_RENDERER_ORIGIN);
 }
 
 /**
@@ -65,25 +49,8 @@ function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
  * Registers all secure IPC handlers prior to window creation.
  */
 function registerIpcHandlers(): void {
-  // Register contract-defined channel and alias 'app'
   ipcMain.handle(IPC_CHANNELS.APP_GET_DESKTOP_INFO, handleGetDesktopInfo);
-  ipcMain.handle('app', handleGetDesktopInfo);
   console.log('[ClipOrbit Main] Registered secure IPC handlers.');
-
-  // Programmatic verification of sender validation security
-  const mockUnauthorizedOrigin = {
-    senderFrame: { url: 'https://unauthorized-domain.com/attack', parent: null },
-  } as unknown as IpcMainInvokeEvent;
-  const mockUnauthorizedIframe = {
-    senderFrame: { url: 'http://127.0.0.1:3000', parent: {} },
-  } as unknown as IpcMainInvokeEvent;
-
-  const originRejected = !isAuthorizedSender(mockUnauthorizedOrigin);
-  const iframeRejected = !isAuthorizedSender(mockUnauthorizedIframe);
-
-  console.log(
-    `[ClipOrbit Security Verification] Unauthorized origin rejected: ${originRejected}, unauthorized iframe rejected: ${iframeRejected}`,
-  );
 }
 
 function createWindow(): BrowserWindow {
@@ -116,26 +83,8 @@ function createWindow(): BrowserWindow {
     console.log(`[ClipOrbit WebContents Log] [Level ${level}]: ${message}`);
   });
 
-  mainWindow.webContents.on('did-finish-load', async () => {
+  mainWindow.webContents.on('did-finish-load', () => {
     console.log('[ClipOrbit Main] Renderer page finished loading successfully.');
-
-    // Programmatic verification of secure renderer environment and IPC round-trip
-    try {
-      const securityStatus = await mainWindow?.webContents.executeJavaScript(
-        '({ hasProcess: typeof window.process !== "undefined", hasRequire: typeof window.require !== "undefined", title: document.title, hasBridge: typeof window.clipOrbit !== "undefined" })',
-      );
-      console.log(
-        '[ClipOrbit Security Check] Sandbox isolation verification:',
-        JSON.stringify(securityStatus),
-      );
-
-      const roundTripInfo = await mainWindow?.webContents.executeJavaScript(
-        'window.clipOrbit.getDesktopInfo()',
-      );
-      console.log('[ClipOrbit IPC Round-Trip Verification]:', JSON.stringify(roundTripInfo));
-    } catch (err) {
-      console.error('[ClipOrbit Security Check] Verification probe encountered an error:', err);
-    }
   });
 
   mainWindow.once('ready-to-show', () => {
@@ -180,7 +129,6 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(() => {
     console.log('[ClipOrbit Main] Electron app ready event received.');
-    // Register IPC handlers after app readiness but before creating the BrowserWindow
     registerIpcHandlers();
     createWindow();
 

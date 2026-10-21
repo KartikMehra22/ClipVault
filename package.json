@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "node scripts/typecheck.mjs",
+    "test": "pnpm --filter @cliporbit/desktop test",
     "clean": "pnpm -r --parallel exec rm -rf dist build out .next .tsbuildinfo"
   },
   "devDependencies": {
