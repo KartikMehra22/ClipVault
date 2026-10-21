@@ -80,6 +80,9 @@ export default tseslint.config(
       react: {
         version: 'detect',
       },
+      next: {
+        rootDir: 'apps/renderer',
+      },
     },
   },
   // Shared contracts (universal runtime-agnostic)
