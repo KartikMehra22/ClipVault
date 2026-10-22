@@ -7,7 +7,7 @@
     "build": "tsc",
     "dev": "tsc && electron .",
     "start": "electron .",
-    "test": "tsc && node --test test/security.test.mjs test/database.test.mjs test/encryption.test.mjs test/lifecycle.test.mjs test/clipboard.test.mjs test/ipc.test.mjs",
+    "test": "tsc && node --test test/security.test.mjs test/database.test.mjs test/encryption.test.mjs test/lifecycle.test.mjs test/clipboard.test.mjs test/ipc.test.mjs test/sensitive.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

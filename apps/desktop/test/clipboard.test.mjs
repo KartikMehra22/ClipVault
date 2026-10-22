@@ -86,6 +86,7 @@ test('ClipboardCapture - starts stopped with empty in-memory history', () => {
   assert.equal(status.itemCount, 0);
   assert.equal(status.totalByteLength, 0);
   assert.equal(status.skippedOversizedCount, 0);
+  assert.equal(status.skippedSensitiveCount, 0);
   assert.equal(status.lastDetectedAt, null);
   assert.equal(service.getRecentItems().length, 0);
 

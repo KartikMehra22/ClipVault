@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import type { ClipboardStatusDto } from '@cliporbit/contracts';
-import { PlayIcon, PauseIcon, StopIcon } from '../../components/common/Icons';
+import { PlayIcon, PauseIcon, StopIcon, ShieldIcon } from '../../components/common/Icons';
 
 export interface CaptureControlBarProps {
   status: ClipboardStatusDto | null;
@@ -27,6 +27,7 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
 }) => {
   const isRunning = Boolean(status?.isRunning);
   const isPaused = Boolean(status?.isPaused);
+  const skippedCount = status?.skippedSensitiveCount ?? 0;
 
   if (!isRunning) {
     return (
@@ -68,6 +69,17 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
           <span className="capture-meta-text">
             Paused • {status?.itemCount ?? 0} items retained in session
           </span>
+          {skippedCount > 0 && (
+            <span
+              className="capture-skipped-pill"
+              title="High-confidence credentials, private keys, or tokens were detected and excluded from in-memory history."
+            >
+              <ShieldIcon size={12} />
+              <span>
+                {skippedCount} potentially sensitive {skippedCount === 1 ? 'item' : 'items'} skipped
+              </span>
+            </span>
+          )}
         </div>
 
         <div className="capture-actions-group">
@@ -108,6 +120,17 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
         <span className="capture-meta-text">
           {status?.itemCount ?? 0} items in memory ({formatBytes(status?.totalByteLength ?? 0)})
         </span>
+        {skippedCount > 0 && (
+          <span
+            className="capture-skipped-pill"
+            title="High-confidence credentials, private keys, or tokens were detected and excluded from in-memory history."
+          >
+            <ShieldIcon size={12} />
+            <span>
+              {skippedCount} potentially sensitive {skippedCount === 1 ? 'item' : 'items'} skipped
+            </span>
+          </span>
+        )}
       </div>
 
       <div className="capture-actions-group">

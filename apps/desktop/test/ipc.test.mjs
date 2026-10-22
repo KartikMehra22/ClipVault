@@ -322,6 +322,7 @@ test('Clipboard IPC - serialization redacts internal fingerprints and secret mat
     'itemCount',
     'lastDetectedAt',
     'skippedOversizedCount',
+    'skippedSensitiveCount',
     'totalByteLength',
   ]);
 

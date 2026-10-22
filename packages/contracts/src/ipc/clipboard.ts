@@ -37,6 +37,8 @@ export interface ClipboardStatusDto {
   totalByteLength: number;
   /** Count of oversized items skipped */
   skippedOversizedCount: number;
+  /** Count of sensitive items excluded from capture */
+  skippedSensitiveCount: number;
   /** ISO 8601 string timestamp of last detected item, or null */
   lastDetectedAt: string | null;
 }

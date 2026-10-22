@@ -47,6 +47,8 @@ export interface ClipboardCaptureStatus {
   totalByteLength: number;
   /** Number of clipboard changes skipped due to exceeding maxItemByteLength. */
   skippedOversizedCount: number;
+  /** Number of clipboard changes excluded due to sensitive content detection. */
+  skippedSensitiveCount: number;
   /** Timestamp of the most recent detected item, or null if none. */
   lastDetectedAt: Date | null;
 }

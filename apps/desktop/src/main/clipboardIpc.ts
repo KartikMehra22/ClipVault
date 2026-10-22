@@ -32,6 +32,7 @@ export function serializeClipboardStatus(status: ClipboardCaptureStatus): Clipbo
     itemCount: Number(status.itemCount),
     totalByteLength: Number(status.totalByteLength),
     skippedOversizedCount: Number(status.skippedOversizedCount),
+    skippedSensitiveCount: Number(status.skippedSensitiveCount),
     lastDetectedAt: status.lastDetectedAt ? status.lastDetectedAt.toISOString() : null,
   };
 }

@@ -23,6 +23,7 @@ import {
 } from './types';
 import { classifyText } from './classifier';
 import { ElectronClipboardAdapter } from './adapter';
+import { detectSensitiveContent } from './sensitiveContentDetector';
 
 /**
  * Computes a SHA-256 hex digest for duplicate detection.
@@ -98,6 +99,7 @@ export class ClipboardCaptureService {
   private history: CapturedTextItem[] = [];
   private totalByteLength = 0;
   private skippedOversizedCount = 0;
+  private skippedSensitiveCount = 0;
   private lastDetectedAt: Date | null = null;
 
   constructor(options?: { adapter?: IClipboardAdapter; config?: ClipboardCaptureConfig }) {
@@ -176,6 +178,7 @@ export class ClipboardCaptureService {
     this.lastFingerprint = null;
     this.clearHistory();
     this.skippedOversizedCount = 0;
+    this.skippedSensitiveCount = 0;
     this.lastDetectedAt = null;
   }
 
@@ -197,6 +200,7 @@ export class ClipboardCaptureService {
       itemCount: this.history.length,
       totalByteLength: this.totalByteLength,
       skippedOversizedCount: this.skippedOversizedCount,
+      skippedSensitiveCount: this.skippedSensitiveCount,
       lastDetectedAt: this.lastDetectedAt,
     };
   }
@@ -288,7 +292,21 @@ export class ClipboardCaptureService {
         return;
       }
 
-      // Rule 4: Create new captured item
+      // Rule 4: Enforce sensitive-content filtering
+      // High-confidence sensitive items must never enter history or be retained.
+      try {
+        const detection = detectSensitiveContent(text);
+        if (detection.isSensitive) {
+          this.skippedSensitiveCount += 1;
+          return;
+        }
+      } catch {
+        // Fail-safe: if detector throws, treat as sensitive and exclude rather than leaking
+        this.skippedSensitiveCount += 1;
+        return;
+      }
+
+      // Rule 5: Create new captured item
       const category = classifyText(text);
       const item: CapturedTextItem = {
         id: crypto.randomUUID(),

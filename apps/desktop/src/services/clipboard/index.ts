@@ -7,3 +7,4 @@ export * from './types';
 export * from './classifier';
 export * from './adapter';
 export * from './service';
+export * from './sensitiveContentDetector';

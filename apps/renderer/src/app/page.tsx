@@ -153,18 +153,25 @@ export default function HomePage() {
         const latestStatus = await window.clipOrbit.getCaptureStatus();
         const current = captureStatusRef.current;
 
-        // Check if history counts, timestamps, or state changed before fetching full clips
+        // Check if history counts, skipped sensitive items, timestamps, or state changed
         const hasChanged =
           !current ||
           latestStatus.itemCount !== current.itemCount ||
+          latestStatus.skippedSensitiveCount !== current.skippedSensitiveCount ||
           latestStatus.lastDetectedAt !== current.lastDetectedAt ||
           latestStatus.isRunning !== current.isRunning ||
           latestStatus.isPaused !== current.isPaused;
 
         if (hasChanged) {
           setCaptureStatus(latestStatus);
-          const clips = await window.clipOrbit.getRecentClips();
-          setItems(clips.map((c) => mapClipDtoToItem(c, pinnedIdsRef.current.has(c.id))));
+          if (
+            !current ||
+            latestStatus.itemCount !== current.itemCount ||
+            latestStatus.lastDetectedAt !== current.lastDetectedAt
+          ) {
+            const clips = await window.clipOrbit.getRecentClips();
+            setItems(clips.map((c) => mapClipDtoToItem(c, pinnedIdsRef.current.has(c.id))));
+          }
         }
       } catch {
         // Suppress polling error during transitions or teardown
