@@ -19,6 +19,8 @@ export interface DesktopBridge {
   stopCapture(): Promise<ClipboardStatusDto>;
   getCaptureStatus(): Promise<ClipboardStatusDto>;
   getRecentClips(): Promise<CapturedClipDto[]>;
+  getClipboardPersistenceEnabled(): Promise<boolean>;
+  setClipboardPersistenceEnabled(enabled: boolean): Promise<boolean>;
 }
 
 export const IPC_CHANNELS = {
@@ -29,4 +31,6 @@ export const IPC_CHANNELS = {
   CLIPBOARD_STOP: 'clipboard:stop',
   CLIPBOARD_GET_STATUS: 'clipboard:get-status',
   CLIPBOARD_GET_RECENT: 'clipboard:get-recent',
+  SETTINGS_GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
+  SETTINGS_SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
 } as const;

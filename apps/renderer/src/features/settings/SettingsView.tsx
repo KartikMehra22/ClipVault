@@ -1,16 +1,92 @@
-import type { FC } from 'react';
+import { useState, useEffect, type FC, type ChangeEvent } from 'react';
 import { InfoIcon } from '../../components/common/Icons';
 
 export const SettingsView: FC = () => {
+  const [persistenceEnabled, setPersistenceEnabled] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPersistenceConsent() {
+      try {
+        if (typeof window !== 'undefined' && window.clipOrbit?.getClipboardPersistenceEnabled) {
+          const enabled = await window.clipOrbit.getClipboardPersistenceEnabled();
+          if (isMounted) {
+            setPersistenceEnabled(Boolean(enabled));
+            setIsLoading(false);
+          }
+        } else {
+          // Non-Electron preview environment: strictly defaults to disabled
+          if (isMounted) {
+            setPersistenceEnabled(false);
+            setIsLoading(false);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setPersistenceEnabled(false);
+          setError('Failed to load persistence preference. Persistence remains disabled.');
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadPersistenceConsent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleTogglePersistence = async (e: ChangeEvent<HTMLInputElement>) => {
+    const targetValue = e.target.checked;
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setClipboardPersistenceEnabled) {
+        const updated = await window.clipOrbit.setClipboardPersistenceEnabled(targetValue);
+        setPersistenceEnabled(Boolean(updated));
+        setSuccessMessage(
+          updated
+            ? 'Encrypted local history saving is enabled.'
+            : 'Encrypted local history saving is disabled.',
+        );
+      } else {
+        throw new Error('Desktop bridge is not available.');
+      }
+    } catch {
+      // On error, fail closed and do not claim success
+      setError('Failed to update persistence preference. Local history saving remains disabled.');
+      if (typeof window !== 'undefined' && window.clipOrbit?.getClipboardPersistenceEnabled) {
+        try {
+          const fallback = await window.clipOrbit.getClipboardPersistenceEnabled();
+          setPersistenceEnabled(Boolean(fallback));
+        } catch {
+          setPersistenceEnabled(false);
+        }
+      } else {
+        setPersistenceEnabled(false);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="settings-view-wrapper">
       {/* Notice Banner */}
       <div className="placeholder-banner">
         <InfoIcon size={16} />
         <div className="placeholder-banner-text">
-          <strong>Settings Preview (Non-Functional)</strong> — The controls below illustrate planned
-          configuration options for ClipOrbit. Preferences persistence, native shortcut bindings,
-          and SQLite storage will be wired in future phases.
+          <strong>Settings & Preferences</strong> — Local encrypted history persistence is
+          functional below under Privacy & Security. Other options illustrate planned configuration
+          settings.
         </div>
       </div>
 
@@ -99,18 +175,82 @@ export const SettingsView: FC = () => {
           </div>
         </section>
 
-        {/* Section 3: Privacy */}
+        {/* Section 3: Privacy & Security */}
         <section className="settings-section" aria-labelledby="settings-privacy-heading">
           <div className="settings-section-header">
             <h3 id="settings-privacy-heading" className="settings-section-title">
               Privacy & Security
             </h3>
             <p className="settings-section-desc">
-              Local-first data protection and secret filtering.
+              Local-first data protection, encryption, and secret filtering.
             </p>
           </div>
 
           <div className="settings-group">
+            {/* Functional Local Persistence Consent Toggle */}
+            <div className="settings-row settings-consent-row">
+              <div className="settings-row-label">
+                <span className="settings-label-title">Save clipboard history on this device</span>
+                <span className="settings-label-sub">
+                  When enabled, eligible clipboard text can be retained in encrypted local history.
+                </span>
+              </div>
+              <div className="settings-toggle-container">
+                {isLoading ? (
+                  <span className="settings-loading-indicator" aria-live="polite">
+                    Checking...
+                  </span>
+                ) : (
+                  <input
+                    type="checkbox"
+                    id="save-clipboard-history-toggle"
+                    checked={persistenceEnabled}
+                    disabled={isSaving}
+                    onChange={handleTogglePersistence}
+                    className="settings-toggle-checkbox"
+                    aria-label="Save clipboard history on this device"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Persistence Disclosures and Guarantees */}
+            <div
+              className="settings-disclosure-box"
+              role="region"
+              aria-label="Encrypted persistence details"
+            >
+              <ul className="settings-disclosure-list">
+                <li>
+                  • <strong>Encrypted storage:</strong> When enabled, eligible clipboard text can be
+                  retained in encrypted local history.
+                </li>
+                <li>
+                  • <strong>Sensitive detection:</strong> Sensitive-content detection reduces risk
+                  but cannot guarantee detection of every secret.
+                </li>
+                <li>
+                  • <strong>Local-only boundary:</strong> This setting controls local persistence
+                  only; it does not enable remote synchronization.
+                </li>
+                <li>
+                  • <strong>Retention control:</strong> Turning this setting off prevents future
+                  persistence, but does not itself delete previously saved history.
+                </li>
+              </ul>
+            </div>
+
+            {error && (
+              <div className="settings-error-banner" role="alert">
+                {error}
+              </div>
+            )}
+            {successMessage && (
+              <div className="settings-success-banner" role="status">
+                {successMessage}
+              </div>
+            )}
+
             <div className="settings-row">
               <div className="settings-row-label">
                 <span className="settings-label-title">Exclude password managers</span>

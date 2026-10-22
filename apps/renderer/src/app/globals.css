@@ -1303,3 +1303,73 @@ body {
   padding: 0.25rem 0.6rem;
   border-radius: var(--radius-xs);
 }
+
+/* Phase 6.3.2: Settings Consent Toggle & Disclosures */
+.settings-consent-row {
+  background-color: var(--bg-surface-raised);
+}
+
+.settings-toggle-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.settings-toggle-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.settings-toggle-container {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 80px;
+}
+
+.settings-loading-indicator {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.settings-disclosure-box {
+  padding: 0.85rem 1rem;
+  background-color: var(--bg-canvas);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-disclosure-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.settings-disclosure-list li {
+  font-size: 0.71875rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.settings-disclosure-list li strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.settings-error-banner {
+  padding: 0.6rem 1rem;
+  background-color: rgba(244, 63, 94, 0.1);
+  border-top: 1px solid rgba(244, 63, 94, 0.25);
+  color: var(--color-danger);
+  font-size: 0.75rem;
+}
+
+.settings-success-banner {
+  padding: 0.6rem 1rem;
+  background-color: rgba(16, 185, 129, 0.1);
+  border-top: 1px solid rgba(16, 185, 129, 0.25);
+  color: var(--color-success);
+  font-size: 0.75rem;
+}

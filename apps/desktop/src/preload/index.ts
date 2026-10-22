@@ -15,6 +15,8 @@ const CHANNELS = {
   STOP_CAPTURE: 'clipboard:stop',
   GET_STATUS: 'clipboard:get-status',
   GET_RECENT: 'clipboard:get-recent',
+  GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
+  SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
 } as const;
 
 const desktopBridge: DesktopBridge = {
@@ -77,6 +79,24 @@ const desktopBridge: DesktopBridge = {
       return (await ipcRenderer.invoke(CHANNELS.GET_RECENT)) as CapturedClipDto[];
     } catch (err) {
       console.error('[ClipOrbit Preload] Failed to retrieve recent clips:', err);
+      throw err;
+    }
+  },
+
+  getClipboardPersistenceEnabled: async (): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.GET_CLIPBOARD_PERSISTENCE)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to retrieve clipboard persistence setting:', err);
+      throw err;
+    }
+  },
+
+  setClipboardPersistenceEnabled: async (enabled: boolean): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SET_CLIPBOARD_PERSISTENCE, enabled)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to update clipboard persistence setting:', err);
       throw err;
     }
   },

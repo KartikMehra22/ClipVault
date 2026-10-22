@@ -9,3 +9,4 @@ export * from './adapter';
 export * from './service';
 export * from './sensitiveContentDetector';
 export * from './persistence';
+export * from './consent';

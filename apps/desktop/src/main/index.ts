@@ -7,6 +7,7 @@ import { initializeEncryptionService, disposeEncryptionService } from '../servic
 import { disposeClipboardCaptureService } from '../services/clipboard';
 import { LifecycleCoordinator, type AppReadinessStatus } from './lifecycle';
 import { registerClipboardIpcHandlers } from './clipboardIpc';
+import { registerSettingsIpcHandlers } from './settingsIpc';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -56,6 +57,11 @@ function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.APP_GET_DESKTOP_INFO, handleGetDesktopInfo);
   registerClipboardIpcHandlers({
+    isAuthorized: isAuthorizedSender,
+    isShutdown: () =>
+      lifecycleCoordinator.isShutdownInProgress() || lifecycleCoordinator.isShutdownCompleted(),
+  });
+  registerSettingsIpcHandlers({
     isAuthorized: isAuthorizedSender,
     isShutdown: () =>
       lifecycleCoordinator.isShutdownInProgress() || lifecycleCoordinator.isShutdownCompleted(),

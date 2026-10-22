@@ -89,10 +89,10 @@ export class PersistenceRecordCorruptedError extends PersistenceError {
 // ---------------------------------------------------------------------------
 
 export interface IPersistencePolicy {
-  isPersistenceEnabled(): boolean;
+  isPersistenceEnabled(): boolean | Promise<boolean>;
 }
 
-export type PersistencePolicyFn = () => boolean;
+export type PersistencePolicyFn = () => boolean | Promise<boolean>;
 
 export interface IClipRepository {
   create(input: CreateClipInput): Promise<Clip>;
@@ -193,19 +193,39 @@ export class EncryptedClipboardPersistenceService {
 
   /**
    * Checks whether persistence is actively enabled by the injected policy.
+   * Fails closed (returns false) on any policy read error or unhandled rejection.
    */
-  public isPersistenceEnabled(): boolean {
-    if (typeof this.policy === 'function') {
-      return Boolean(this.policy());
+  public isPersistenceEnabled(): boolean | Promise<boolean> {
+    try {
+      let result: boolean | Promise<boolean>;
+      if (typeof this.policy === 'function') {
+        result = this.policy();
+      } else if (
+        typeof this.policy === 'object' &&
+        this.policy !== null &&
+        typeof this.policy.isPersistenceEnabled === 'function'
+      ) {
+        result = this.policy.isPersistenceEnabled();
+      } else {
+        return false;
+      }
+
+      if (
+        result instanceof Promise ||
+        (typeof result === 'object' && result !== null && 'then' in result)
+      ) {
+        return (async () => {
+          try {
+            return Boolean(await result);
+          } catch {
+            return false;
+          }
+        })();
+      }
+      return Boolean(result);
+    } catch {
+      return false;
     }
-    if (
-      typeof this.policy === 'object' &&
-      this.policy !== null &&
-      typeof this.policy.isPersistenceEnabled === 'function'
-    ) {
-      return Boolean(this.policy.isPersistenceEnabled());
-    }
-    return false;
   }
 
   /**
@@ -220,7 +240,8 @@ export class EncryptedClipboardPersistenceService {
    */
   public async saveTextClip(input: SaveTextClipInput): Promise<SavedClipResult> {
     // 1. Consent policy check
-    if (!this.isPersistenceEnabled()) {
+    const isEnabled = await this.isPersistenceEnabled();
+    if (!isEnabled) {
       throw new PersistenceDisabledError();
     }
 
