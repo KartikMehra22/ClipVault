@@ -36,8 +36,11 @@ import {
   detectSensitiveContent,
   ClipboardCaptureService,
   FakeClipboardAdapter,
+  MAX_SAFE_ITEM_BYTE_LENGTH,
+  MAX_SAFE_SCAN_BYTE_LENGTH,
+  ClipboardValidationError,
 } from '../dist/services/clipboard/index.js';
-import { createClipboardIpcHandlers } from '../dist/main/clipboardIpc.js';
+import { createClipboardIpcHandlers, serializeClipboardStatus } from '../dist/main/clipboardIpc.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -252,6 +255,7 @@ test('Detector - bounded execution: processes large 100 KiB inputs cleanly witho
   const elapsed = Date.now() - startTime;
 
   assert.equal(res.isSensitive, false);
+  assert.equal(res.exceededScanLimit, true);
   assert.ok(elapsed < 200, `Detector took too long on large input: ${elapsed}ms`);
 });
 
@@ -545,4 +549,337 @@ test('Capture Pipeline - sensitive contents do not appear in console logs or err
     console.warn = originalWarn;
     console.error = originalError;
   }
+});
+
+// ============================================================================
+// 3. Phase 6.2: Sensitive Scanning Boundary Hardening Tests
+// ============================================================================
+
+test('Boundary - ordinary item below effective byte limit is processed normally', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+  const safeText = 'console.log("Safe code snippet below 64 KiB boundary");';
+  adapter.setText(safeText);
+  await service.pollNow();
+
+  const status = service.getStatus();
+  assert.equal(status.itemCount, 1);
+  assert.equal(status.skippedOversizedCount, 0);
+  assert.equal(status.skippedSensitiveCount, 0);
+
+  const items = service.getRecentItems();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].text, safeText);
+  assert.equal(items[0].byteLength, Buffer.byteLength(safeText, 'utf8'));
+
+  service.stop();
+});
+
+test('Boundary - item exactly at the configured 64 KiB limit is processed and completely scanned', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // Verify alignment between service item ceiling and detector safe scanning limit
+  assert.equal(MAX_SAFE_ITEM_BYTE_LENGTH, MAX_SAFE_SCAN_BYTE_LENGTH);
+
+  // Exactly 65,536 bytes (64 KiB = MAX_SAFE_ITEM_BYTE_LENGTH)
+  const exactLength = MAX_SAFE_ITEM_BYTE_LENGTH;
+  const exactText = 'a'.repeat(exactLength);
+  assert.equal(Buffer.byteLength(exactText, 'utf8'), exactLength);
+
+  adapter.setText(exactText);
+  await service.pollNow();
+
+  const status = service.getStatus();
+  assert.equal(status.itemCount, 1, 'Item exactly at limit must be accepted');
+  assert.equal(status.skippedOversizedCount, 0);
+  assert.equal(status.skippedSensitiveCount, 0);
+
+  const items = service.getRecentItems();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].byteLength, exactLength);
+
+  service.stop();
+});
+
+test('Boundary - item one byte above the 64 KiB limit is skipped as oversized', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // Exactly 65,537 bytes (64 KiB + 1 byte)
+  const aboveLimitLength = MAX_SAFE_ITEM_BYTE_LENGTH + 1;
+  const aboveLimitText = 'a'.repeat(aboveLimitLength);
+  assert.equal(Buffer.byteLength(aboveLimitText, 'utf8'), aboveLimitLength);
+
+  adapter.setText(aboveLimitText);
+  await service.pollNow();
+
+  const status = service.getStatus();
+  assert.equal(status.itemCount, 0, 'Item above limit must NOT be retained in history');
+  assert.equal(status.skippedOversizedCount, 1, 'skippedOversizedCount must increment');
+  assert.equal(status.skippedSensitiveCount, 0);
+  assert.equal(service.getRecentItems().length, 0);
+
+  service.stop();
+});
+
+test('Boundary - multibyte UTF-8 items are measured accurately by byte length', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // '€' is 3 bytes in UTF-8, but length 1 in JS string.
+  // 22,000 '€' chars = 22,000 string length, but 66,000 UTF-8 bytes (> 65,536 limit).
+  const oversizedMultibyte = '€'.repeat(22000);
+  assert.equal(oversizedMultibyte.length, 22000);
+  assert.equal(Buffer.byteLength(oversizedMultibyte, 'utf8'), 66000);
+
+  adapter.setText(oversizedMultibyte);
+  await service.pollNow();
+
+  const status1 = service.getStatus();
+  assert.equal(status1.itemCount, 0, 'Multibyte item exceeding byte limit must be skipped');
+  assert.equal(status1.skippedOversizedCount, 1);
+
+  // 10,000 '€' chars = 10,000 string length, 30,000 UTF-8 bytes (<= 65,536 limit).
+  const validMultibyte = '€'.repeat(10000);
+  assert.equal(Buffer.byteLength(validMultibyte, 'utf8'), 30000);
+
+  adapter.setText(validMultibyte);
+  await service.pollNow();
+
+  const status2 = service.getStatus();
+  assert.equal(status2.itemCount, 1, 'Valid multibyte item below limit must be accepted');
+  assert.equal(status2.skippedOversizedCount, 1);
+  assert.equal(service.getRecentItems()[0].byteLength, 30000);
+
+  service.stop();
+});
+
+test('Boundary - fabricated credential placed before the scan boundary is excluded', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // 5 KiB text containing a synthetic credential well within the 64 KiB boundary
+  const prefix = 'const config = {\n  host: "localhost",\n};\n'.repeat(100);
+  const secret = 'ghp_1234567890abcdefghijklmnopqrstuvwxyz';
+  const text = `${prefix}\nexport GITHUB_TOKEN = "${secret}";\n`;
+  assert.ok(Buffer.byteLength(text, 'utf8') < MAX_SAFE_ITEM_BYTE_LENGTH);
+
+  adapter.setText(text);
+  await service.pollNow();
+
+  const status = service.getStatus();
+  assert.equal(status.itemCount, 0, 'Sensitive item must be excluded from history');
+  assert.equal(status.skippedSensitiveCount, 1);
+  assert.equal(status.skippedOversizedCount, 0);
+  assert.equal(service.getRecentItems().length, 0);
+
+  service.stop();
+});
+
+test('Boundary - fabricated credential placed beyond 64 KiB boundary cannot be retained', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // 66 KiB of ordinary code prefix followed by a synthetic secret
+  const prefix = 'a'.repeat(66000);
+  const secret = 'ghp_1234567890abcdefghijklmnopqrstuvwxyz';
+  const textWithLateSecret = `${prefix} ${secret}`;
+  assert.ok(Buffer.byteLength(textWithLateSecret, 'utf8') > MAX_SAFE_ITEM_BYTE_LENGTH);
+
+  adapter.setText(textWithLateSecret);
+  await service.pollNow();
+
+  const status = service.getStatus();
+  assert.equal(status.itemCount, 0, 'Item exceeding safe scanning ceiling must NOT be retained');
+  assert.equal(status.skippedOversizedCount, 1, 'Must be skipped as oversized');
+  assert.equal(service.getRecentItems().length, 0);
+
+  // Verify IPC bridge never emits it
+  const handlers = createClipboardIpcHandlers({
+    captureService: service,
+    isAuthorized: () => true,
+    isShutdown: () => false,
+  });
+  const event = createMockEvent();
+  const clips = handlers.handleGetRecentClips(event);
+  assert.equal(clips.length, 0);
+
+  service.stop();
+});
+
+test('Boundary - large ordinary text exceeding safe scan limit is skipped conservatively', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // 80 KiB of safe ordinary text
+  const largeOrdinary = 'This is safe ordinary prose without any secrets.\n'.repeat(1650);
+  assert.ok(Buffer.byteLength(largeOrdinary, 'utf8') > MAX_SAFE_ITEM_BYTE_LENGTH);
+
+  adapter.setText(largeOrdinary);
+  await service.pollNow();
+
+  const status = service.getStatus();
+  assert.equal(status.itemCount, 0, 'Unverifiable large item must be skipped conservatively');
+  assert.equal(status.skippedOversizedCount, 1);
+  assert.equal(status.skippedSensitiveCount, 0);
+  assert.equal(service.getRecentItems().length, 0);
+
+  service.stop();
+});
+
+test('Boundary - unchanged skipped oversized item does not repeatedly increment counter', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  const oversized = 'x'.repeat(70000);
+  adapter.setText(oversized);
+
+  await service.pollNow();
+  assert.equal(service.getStatus().skippedOversizedCount, 1);
+
+  // Poll multiple times with unchanged clipboard
+  await service.pollNow();
+  await service.pollNow();
+  await service.pollNow();
+
+  assert.equal(
+    service.getStatus().skippedOversizedCount,
+    1,
+    'Counter must remain 1 on unchanged oversized item',
+  );
+
+  service.stop();
+});
+
+test('Boundary - subsequent ordinary text below the limit is captured normally after oversized skip', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // 1. Skip oversized item
+  adapter.setText('x'.repeat(70000));
+  await service.pollNow();
+  assert.equal(service.getStatus().itemCount, 0);
+  assert.equal(service.getStatus().skippedOversizedCount, 1);
+
+  // 2. Capture normal item
+  adapter.setText('https://github.com/KartikMehra22/ClipVault');
+  await service.pollNow();
+
+  const status = service.getStatus();
+  assert.equal(status.itemCount, 1);
+  assert.equal(status.skippedOversizedCount, 1);
+  assert.equal(service.getRecentItems()[0].text, 'https://github.com/KartikMehra22/ClipVault');
+
+  service.stop();
+});
+
+test('Boundary - no skipped oversized or sensitive content is returned by history APIs or IPC DTOs', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+  const handlers = createClipboardIpcHandlers({
+    captureService: service,
+    isAuthorized: () => true,
+    isShutdown: () => false,
+  });
+  const event = createMockEvent();
+
+  await handlers.handleStartCapture(event);
+
+  // 1. Trigger oversized skip
+  adapter.setText('x'.repeat(70000));
+  await service.pollNow();
+
+  // 2. Trigger sensitive skip
+  adapter.setText('AKIAIOSFODNN7EXAMPLE');
+  await service.pollNow();
+
+  const status = handlers.handleGetCaptureStatus(event);
+  assert.equal(status.itemCount, 0);
+  assert.equal(status.skippedOversizedCount, 1);
+  assert.equal(status.skippedSensitiveCount, 1);
+
+  // Verify recent clips list is strictly empty
+  const clips = handlers.handleGetRecentClips(event);
+  assert.equal(clips.length, 0);
+
+  // Verify serialized status contains zero secret text or excerpts
+  const serialized = serializeClipboardStatus(service.getStatus());
+  const serializedStr = JSON.stringify(serialized);
+  assert.equal(serializedStr.includes('AKIA'), false);
+  assert.equal(serializedStr.includes('xxxx'), false);
+
+  service.stop();
+});
+
+test('Boundary - memory budget and FIFO eviction behavior remain correct', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  // Configure tight bounds: max 3 items, max 300 bytes total
+  const service = new ClipboardCaptureService({
+    adapter,
+    config: {
+      maxItems: 3,
+      maxItemByteLength: 100,
+      maxTotalByteLength: 300,
+    },
+  });
+
+  await service.start();
+
+  // Insert 4 items of 80 bytes each
+  for (let i = 1; i <= 4; i++) {
+    const text = `Item ${i}: `.padEnd(80, '.');
+    adapter.setText(text);
+    await service.pollNow();
+  }
+
+  const status = service.getStatus();
+  // With maxItems: 3 and maxTotalByteLength: 300, 3 items of 80 bytes = 240 bytes (fits budget)
+  assert.equal(status.itemCount, 3, 'Oldest item must be evicted');
+  assert.equal(status.totalByteLength, 240);
+  assert.ok(status.totalByteLength <= 300);
+
+  const items = service.getRecentItems();
+  assert.equal(items.length, 3);
+  // FIFO / most recent first: item 4, item 3, item 2 (item 1 evicted)
+  assert.ok(items[0].text.startsWith('Item 4:'));
+  assert.ok(items[1].text.startsWith('Item 3:'));
+  assert.ok(items[2].text.startsWith('Item 2:'));
+
+  service.stop();
+});
+
+test('Boundary - configuration exceeding MAX_SAFE_ITEM_BYTE_LENGTH is rejected', () => {
+  assert.throws(
+    () =>
+      new ClipboardCaptureService({
+        config: { maxItemByteLength: MAX_SAFE_ITEM_BYTE_LENGTH + 1 },
+      }),
+    ClipboardValidationError,
+  );
+  assert.throws(
+    () =>
+      new ClipboardCaptureService({
+        config: { maxItemByteLength: 512 * 1024 },
+      }),
+    ClipboardValidationError,
+  );
 });

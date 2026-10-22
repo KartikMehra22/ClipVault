@@ -19,6 +19,7 @@ import {
   type ClipboardCaptureStatus,
   type IClipboardAdapter,
   DEFAULT_CAPTURE_CONFIG,
+  MAX_SAFE_ITEM_BYTE_LENGTH,
   ClipboardValidationError,
 } from './types';
 import { classifyText } from './classifier';
@@ -62,10 +63,12 @@ function validateConfig(config?: ClipboardCaptureConfig): Required<ClipboardCapt
   if (
     typeof merged.maxItemByteLength !== 'number' ||
     !Number.isInteger(merged.maxItemByteLength) ||
-    merged.maxItemByteLength < 1
+    merged.maxItemByteLength < 1 ||
+    merged.maxItemByteLength > MAX_SAFE_ITEM_BYTE_LENGTH
   ) {
     throw new ClipboardValidationError(
-      `Invalid maxItemByteLength: expected integer >= 1 (received ${String(merged.maxItemByteLength)}).`,
+      `Invalid maxItemByteLength: expected integer between 1 and ${MAX_SAFE_ITEM_BYTE_LENGTH} bytes ` +
+        `(received ${String(merged.maxItemByteLength)}). Cannot exceed maximum safe scanning limit.`,
     );
   }
 
@@ -298,6 +301,11 @@ export class ClipboardCaptureService {
         const detection = detectSensitiveContent(text);
         if (detection.isSensitive) {
           this.skippedSensitiveCount += 1;
+          return;
+        }
+        if (detection.exceededScanLimit) {
+          // Defense-in-depth: If the item exceeded the safe scanning limit, skip conservatively as oversized
+          this.skippedOversizedCount += 1;
           return;
         }
       } catch {

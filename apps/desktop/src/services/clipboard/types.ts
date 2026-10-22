@@ -66,6 +66,13 @@ export interface IClipboardAdapter {
 }
 
 /**
+ * Maximum safe UTF-8 byte length permitted for any single clipboard item.
+ * Exactly matches the sensitive detector's safe scanning ceiling (64 KiB = 65,536 bytes).
+ * Ensures items are never accepted after scanning only a truncated prefix.
+ */
+export const MAX_SAFE_ITEM_BYTE_LENGTH = 64 * 1024; // 64 KiB = 65,536 bytes
+
+/**
  * Configuration options for the clipboard capture service.
  */
 export interface ClipboardCaptureConfig {
@@ -73,7 +80,10 @@ export interface ClipboardCaptureConfig {
   pollingIntervalMs?: number;
   /** Maximum number of history items to retain in memory (default: 100). */
   maxItems?: number;
-  /** Maximum UTF-8 byte length permitted for a single item (default: 64 KiB = 65,536 bytes). */
+  /**
+   * Maximum UTF-8 byte length permitted for a single item (default: 64 KiB = 65,536 bytes; maximum: 64 KiB).
+   * Must not exceed MAX_SAFE_ITEM_BYTE_LENGTH to guarantee complete sensitive-content scanning.
+   */
   maxItemByteLength?: number;
   /** Maximum aggregate byte length across all in-memory items (default: 4 MiB = 4,194,304 bytes). */
   maxTotalByteLength?: number;
@@ -85,7 +95,7 @@ export interface ClipboardCaptureConfig {
 export const DEFAULT_CAPTURE_CONFIG: Required<ClipboardCaptureConfig> = {
   pollingIntervalMs: 600,
   maxItems: 100,
-  maxItemByteLength: 64 * 1024, // 64 KiB
+  maxItemByteLength: MAX_SAFE_ITEM_BYTE_LENGTH, // 64 KiB
   maxTotalByteLength: 4 * 1024 * 1024, // 4 MiB
 };
 

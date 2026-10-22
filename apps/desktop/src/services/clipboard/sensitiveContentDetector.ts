@@ -40,6 +40,8 @@
  *    data are outside the scope of this text detector.
  */
 
+import { Buffer } from 'node:buffer';
+
 export type DetectionConfidence = 'high' | 'medium' | 'none';
 
 export type SensitiveCategory =
@@ -58,10 +60,17 @@ export interface SensitiveDetectionResult {
   confidence: DetectionConfidence;
   /** Generic categories of matched items (contains no secret values or excerpts). */
   matchedCategories: SensitiveCategory[];
+  /** True if input UTF-8 byte length exceeded the safe scanning limit (64 KiB). */
+  exceededScanLimit: boolean;
 }
 
-/** Maximum input character length scanned to avoid unbounded CPU consumption. */
-const MAX_SCAN_CHARACTERS = 64 * 1024; // 64 KiB
+/**
+ * Maximum safe UTF-8 byte length scanned by the sensitive content detector.
+ * Clamped at 64 KiB (65,536 bytes) to prevent catastrophic regex backtracking (ReDoS).
+ * The capture service enforces this as the strict upper bound for all accepted items,
+ * ensuring no item is ever retained after examining only a truncated prefix.
+ */
+export const MAX_SAFE_SCAN_BYTE_LENGTH = 64 * 1024; // 64 KiB = 65,536 bytes
 
 // ============================================================================
 // Detection Patterns (Carefully constructed to prevent ReDoS / backtracking)
@@ -140,11 +149,21 @@ export function detectSensitiveContent(text: string): SensitiveDetectionResult {
       isSensitive: false,
       confidence: 'none',
       matchedCategories: [],
+      exceededScanLimit: false,
     };
   }
 
-  // Bound scan length to avoid runaway processing on giant clips
-  const boundedText = text.length > MAX_SCAN_CHARACTERS ? text.slice(0, MAX_SCAN_CHARACTERS) : text;
+  // Calculate actual UTF-8 byte length rather than JavaScript string length
+  const byteLength = Buffer.byteLength(text, 'utf8');
+  const exceededScanLimit = byteLength > MAX_SAFE_SCAN_BYTE_LENGTH;
+
+  // Bound scan length: if called directly on inputs exceeding the safe scanning limit,
+  // bound execution to at most MAX_SAFE_SCAN_BYTE_LENGTH UTF-8 bytes to avoid ReDoS.
+  // Note: Callers in the capture engine MUST NOT accept or retain any item for which
+  // exceededScanLimit is true, as the entire payload has not been verified.
+  const boundedText = exceededScanLimit
+    ? Buffer.from(text, 'utf8').subarray(0, MAX_SAFE_SCAN_BYTE_LENGTH).toString('utf8')
+    : text;
 
   const categories = new Set<SensitiveCategory>();
 
@@ -203,5 +222,6 @@ export function detectSensitiveContent(text: string): SensitiveDetectionResult {
     isSensitive,
     confidence,
     matchedCategories,
+    exceededScanLimit,
   };
 }

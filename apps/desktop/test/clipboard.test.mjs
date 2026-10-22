@@ -413,6 +413,13 @@ test('ClipboardCapture - rejects invalid configuration parameters', () => {
       }),
     ClipboardValidationError,
   );
+  assert.throws(
+    () =>
+      new ClipboardCaptureService({
+        config: { maxItemByteLength: 70 * 1024 },
+      }),
+    ClipboardValidationError,
+  );
 });
 
 test('ClipboardCapture - adapter failures are safely contained without crashing', async () => {

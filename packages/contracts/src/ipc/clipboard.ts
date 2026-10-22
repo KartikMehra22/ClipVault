@@ -35,7 +35,7 @@ export interface ClipboardStatusDto {
   itemCount: number;
   /** Total UTF-8 bytes retained in memory */
   totalByteLength: number;
-  /** Count of oversized items skipped */
+  /** Count of oversized items skipped due to exceeding maxItemByteLength (safe scan limit of 64 KiB) */
   skippedOversizedCount: number;
   /** Count of sensitive items excluded from capture */
   skippedSensitiveCount: number;

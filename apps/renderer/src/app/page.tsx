@@ -153,11 +153,12 @@ export default function HomePage() {
         const latestStatus = await window.clipOrbit.getCaptureStatus();
         const current = captureStatusRef.current;
 
-        // Check if history counts, skipped sensitive items, timestamps, or state changed
+        // Check if history counts, skipped sensitive items, skipped oversized items, timestamps, or state changed
         const hasChanged =
           !current ||
           latestStatus.itemCount !== current.itemCount ||
           latestStatus.skippedSensitiveCount !== current.skippedSensitiveCount ||
+          latestStatus.skippedOversizedCount !== current.skippedOversizedCount ||
           latestStatus.lastDetectedAt !== current.lastDetectedAt ||
           latestStatus.isRunning !== current.isRunning ||
           latestStatus.isPaused !== current.isPaused;

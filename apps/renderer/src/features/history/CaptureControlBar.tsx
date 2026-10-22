@@ -28,6 +28,7 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
   const isRunning = Boolean(status?.isRunning);
   const isPaused = Boolean(status?.isPaused);
   const skippedCount = status?.skippedSensitiveCount ?? 0;
+  const oversizedCount = status?.skippedOversizedCount ?? 0;
 
   if (!isRunning) {
     return (
@@ -80,6 +81,16 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
               </span>
             </span>
           )}
+          {oversizedCount > 0 && (
+            <span
+              className="capture-skipped-pill capture-oversized-pill"
+              title="Items exceeding the maximum safe limit (64 KB) were skipped to ensure complete sensitive-content scanning."
+            >
+              <span>
+                {oversizedCount} large {oversizedCount === 1 ? 'item' : 'items'} skipped (&gt;64 KB)
+              </span>
+            </span>
+          )}
         </div>
 
         <div className="capture-actions-group">
@@ -128,6 +139,16 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
             <ShieldIcon size={12} />
             <span>
               {skippedCount} potentially sensitive {skippedCount === 1 ? 'item' : 'items'} skipped
+            </span>
+          </span>
+        )}
+        {oversizedCount > 0 && (
+          <span
+            className="capture-skipped-pill capture-oversized-pill"
+            title="Items exceeding the maximum safe limit (64 KB) were skipped to ensure complete sensitive-content scanning."
+          >
+            <span>
+              {oversizedCount} large {oversizedCount === 1 ? 'item' : 'items'} skipped (&gt;64 KB)
             </span>
           </span>
         )}
