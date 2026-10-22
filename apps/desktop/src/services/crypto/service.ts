@@ -125,6 +125,13 @@ export function isEncryptionServiceInitialized(): boolean {
 }
 
 /**
+ * Returns the default encryption service singleton, or null if uninitialized.
+ */
+export function getEncryptionService(): EncryptionService | null {
+  return defaultService;
+}
+
+/**
  * Encrypts an arbitrary binary payload using the default service master key.
  *
  * @throws CryptoError if the service has not been initialized.

@@ -18,16 +18,24 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { type Clip, type CreateClipInput, type FindRecentClipsOptions } from '@cliporbit/database';
+import {
+  type Clip,
+  type CreateClipInput,
+  type FindRecentClipsOptions,
+  createClipRepository,
+} from '@cliporbit/database';
 import {
   toClipEncryptionFields,
   fromClipRecord,
   type EncryptedPayload,
   type DecryptPayloadInput,
   CryptoError,
+  getEncryptionService,
 } from '../crypto';
+import { getDatabaseClient } from '../database';
 import { MAX_SAFE_ITEM_BYTE_LENGTH } from './types';
 import { detectSensitiveContent, type SensitiveDetectionResult } from './sensitiveContentDetector';
+import { getClipboardPersistencePolicy } from './consent';
 
 // ---------------------------------------------------------------------------
 // Error Hierarchy
@@ -90,6 +98,7 @@ export class PersistenceRecordCorruptedError extends PersistenceError {
 
 export interface IPersistencePolicy {
   isPersistenceEnabled(): boolean | Promise<boolean>;
+  coordinateSave?<T>(saveFn: () => Promise<T>): Promise<T>;
 }
 
 export type PersistencePolicyFn = () => boolean | Promise<boolean>;
@@ -239,86 +248,105 @@ export class EncryptedClipboardPersistenceService {
    * 5. No plaintext fallback under any error condition.
    */
   public async saveTextClip(input: SaveTextClipInput): Promise<SavedClipResult> {
-    // 1. Consent policy check
-    const isEnabled = await this.isPersistenceEnabled();
-    if (!isEnabled) {
-      throw new PersistenceDisabledError();
-    }
-
-    if (!input || typeof input !== 'object') {
-      throw new PersistenceValidationError('SaveTextClipInput must be an object.');
-    }
-
-    if (typeof input.text !== 'string' || input.text.length === 0) {
-      throw new PersistenceValidationError('Clip text must be a non-empty string.');
-    }
-
-    // 2. Validate UTF-8 byte length using the safe 64 KiB scanning ceiling
-    const byteLength = Buffer.byteLength(input.text, 'utf8');
-    if (byteLength > MAX_SAFE_ITEM_BYTE_LENGTH) {
-      throw new PersistenceValidationError(
-        `Payload size (${byteLength} bytes) exceeds maximum safe scanning limit of ${MAX_SAFE_ITEM_BYTE_LENGTH} bytes.`,
-      );
-    }
-
-    // 3. Sensitive content detection at the persistence boundary
-    const detection = this.sensitiveDetector(input.text);
-    if (detection.isSensitive || detection.exceededScanLimit) {
-      throw new PersistenceSensitiveContentError();
-    }
-
-    // 4. Encode safe text as UTF-8 bytes
-    const payloadBytes = Buffer.from(input.text, 'utf8');
-
-    // 5. Encrypt payload using authenticated AES-256-GCM
-    let encrypted: EncryptedPayload;
-    try {
-      encrypted = this.encryptionService.encrypt(payloadBytes);
-    } catch (error) {
-      if (error instanceof CryptoError) {
-        throw new PersistenceEncryptionError(error.message);
+    const executeSave = async (): Promise<SavedClipResult> => {
+      // 1. Consent policy check
+      const isEnabled = await this.isPersistenceEnabled();
+      if (!isEnabled) {
+        throw new PersistenceDisabledError();
       }
-      throw new PersistenceEncryptionError('Payload encryption failed unexpectedly.');
-    }
 
-    // 6. Map to database schema format
-    const encryptionFields = toClipEncryptionFields(encrypted, byteLength);
+      if (!input || typeof input !== 'object') {
+        throw new PersistenceValidationError('SaveTextClipInput must be an object.');
+      }
 
-    const sourceApp =
-      typeof input.sourceApp === 'string' && input.sourceApp.trim().length > 0
-        ? input.sourceApp.trim().slice(0, 256)
-        : null;
+      if (typeof input.text !== 'string' || input.text.length === 0) {
+        throw new PersistenceValidationError('Clip text must be a non-empty string.');
+      }
 
-    // 7. Write strictly encrypted fields to the repository
-    let savedClip: Clip;
-    try {
-      savedClip = await this.repository.create({
-        ...(input.id ? { id: input.id } : {}),
-        contentType: 'text/plain',
-        encryptedPayload: encryptionFields.encryptedPayload,
-        encryptionNonce: encryptionFields.encryptionNonce,
-        encryptionAuthTag: encryptionFields.encryptionAuthTag,
-        encryptionVersion: encryptionFields.encryptionVersion,
-        payloadByteLength: encryptionFields.payloadByteLength,
-        sourceApp,
-        isSensitive: false, // Sensitive items are excluded, never marked sensitive and stored
-        pinnedAt: input.pinnedAt ?? null,
-        expiresAt: input.expiresAt ?? null,
-        createdAt: input.createdAt,
-      });
-    } catch (error) {
-      throw new PersistenceDatabaseError(
-        error instanceof Error ? error.message : 'Database write failed during clip persistence.',
-      );
-    }
+      // 2. Validate UTF-8 byte length using the safe 64 KiB scanning ceiling
+      const byteLength = Buffer.byteLength(input.text, 'utf8');
+      if (byteLength > MAX_SAFE_ITEM_BYTE_LENGTH) {
+        throw new PersistenceValidationError(
+          `Payload size (${byteLength} bytes) exceeds maximum safe scanning limit of ${MAX_SAFE_ITEM_BYTE_LENGTH} bytes.`,
+        );
+      }
 
-    return {
-      id: savedClip.id,
-      byteLength: savedClip.payloadByteLength,
-      contentType: savedClip.contentType,
-      createdAt: savedClip.createdAt,
-      isPinned: Boolean(savedClip.pinnedAt),
+      // 3. Sensitive content detection at the persistence boundary
+      const detection = this.sensitiveDetector(input.text);
+      if (detection.isSensitive || detection.exceededScanLimit) {
+        throw new PersistenceSensitiveContentError();
+      }
+
+      // 4. Encode safe text as UTF-8 bytes
+      const payloadBytes = Buffer.from(input.text, 'utf8');
+
+      // 5. Encrypt payload using authenticated AES-256-GCM
+      let encrypted: EncryptedPayload;
+      try {
+        encrypted = this.encryptionService.encrypt(payloadBytes);
+      } catch (error) {
+        if (error instanceof CryptoError) {
+          throw new PersistenceEncryptionError(error.message);
+        }
+        throw new PersistenceEncryptionError('Payload encryption failed unexpectedly.');
+      }
+
+      // 6. Map to database schema format
+      const encryptionFields = toClipEncryptionFields(encrypted, byteLength);
+
+      const sourceApp =
+        typeof input.sourceApp === 'string' && input.sourceApp.trim().length > 0
+          ? input.sourceApp.trim().slice(0, 256)
+          : null;
+
+      // 6.5. Pre-commit authorization re-check: ensure consent has not been revoked
+      // or entered a fail-closed state while encryption or serialization was in-flight.
+      const stillEnabled = await this.isPersistenceEnabled();
+      if (!stillEnabled) {
+        throw new PersistenceDisabledError();
+      }
+
+      // 7. Write strictly encrypted fields to the repository
+      let savedClip: Clip;
+      try {
+        savedClip = await this.repository.create({
+          ...(input.id ? { id: input.id } : {}),
+          contentType: 'text/plain',
+          encryptedPayload: encryptionFields.encryptedPayload,
+          encryptionNonce: encryptionFields.encryptionNonce,
+          encryptionAuthTag: encryptionFields.encryptionAuthTag,
+          encryptionVersion: encryptionFields.encryptionVersion,
+          payloadByteLength: encryptionFields.payloadByteLength,
+          sourceApp,
+          isSensitive: false, // Sensitive items are excluded, never marked sensitive and stored
+          pinnedAt: input.pinnedAt ?? null,
+          expiresAt: input.expiresAt ?? null,
+          createdAt: input.createdAt,
+        });
+      } catch (error) {
+        throw new PersistenceDatabaseError(
+          error instanceof Error ? error.message : 'Database write failed during clip persistence.',
+        );
+      }
+
+      return {
+        id: savedClip.id,
+        byteLength: savedClip.payloadByteLength,
+        contentType: savedClip.contentType,
+        createdAt: savedClip.createdAt,
+        isPinned: Boolean(savedClip.pinnedAt),
+      };
     };
+
+    if (
+      typeof this.policy === 'object' &&
+      this.policy !== null &&
+      typeof this.policy.coordinateSave === 'function'
+    ) {
+      return this.policy.coordinateSave(executeSave);
+    }
+
+    return executeSave();
   }
 
   /**
@@ -554,4 +582,39 @@ export function createEncryptedClipboardPersistenceService(
   options: EncryptedClipboardPersistenceOptions,
 ): EncryptedClipboardPersistenceService {
   return new EncryptedClipboardPersistenceService(options);
+}
+
+// ---------------------------------------------------------------------------
+// Singleton Service and Facade Functions
+// ---------------------------------------------------------------------------
+
+let defaultPersistenceService: EncryptedClipboardPersistenceService | null = null;
+
+/**
+ * Returns the default singleton persistence service, or null if database or encryption is not ready.
+ */
+export function getEncryptedClipboardPersistenceService(): EncryptedClipboardPersistenceService | null {
+  if (!defaultPersistenceService) {
+    const client = getDatabaseClient();
+    const encryption = getEncryptionService();
+    if (!client || !encryption || !encryption.isReady()) {
+      return null;
+    }
+    const repository = createClipRepository(client);
+    const policy = getClipboardPersistencePolicy();
+    defaultPersistenceService = new EncryptedClipboardPersistenceService({
+      repository,
+      encryptionService: encryption,
+      policy,
+      sensitiveDetector: detectSensitiveContent,
+    });
+  }
+  return defaultPersistenceService;
+}
+
+/**
+ * Resets the default singleton persistence service (useful in tests and shutdown).
+ */
+export function resetEncryptedClipboardPersistenceService(): void {
+  defaultPersistenceService = null;
 }

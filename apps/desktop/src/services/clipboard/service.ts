@@ -25,6 +25,11 @@ import {
 import { classifyText } from './classifier';
 import { ElectronClipboardAdapter } from './adapter';
 import { detectSensitiveContent } from './sensitiveContentDetector';
+import {
+  type EncryptedClipboardPersistenceService,
+  getEncryptedClipboardPersistenceService,
+  resetEncryptedClipboardPersistenceService,
+} from './persistence';
 
 /**
  * Computes a SHA-256 hex digest for duplicate detection.
@@ -32,6 +37,21 @@ import { detectSensitiveContent } from './sensitiveContentDetector';
  */
 function computeFingerprint(text: string): string {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/**
+ * Source for EncryptedClipboardPersistenceService injection.
+ */
+export type PersistenceServiceSource =
+  EncryptedClipboardPersistenceService | (() => EncryptedClipboardPersistenceService | null) | null;
+
+/**
+ * Options for configuring ClipboardCaptureService.
+ */
+export interface ClipboardCaptureServiceOptions {
+  adapter?: IClipboardAdapter;
+  config?: ClipboardCaptureConfig;
+  persistenceService?: PersistenceServiceSource;
 }
 
 /**
@@ -92,6 +112,7 @@ function validateConfig(config?: ClipboardCaptureConfig): Required<ClipboardCapt
 export class ClipboardCaptureService {
   private readonly adapter: IClipboardAdapter;
   private readonly config: Required<ClipboardCaptureConfig>;
+  private readonly persistenceSource?: PersistenceServiceSource;
 
   private isRunning = false;
   private isPaused = false;
@@ -105,9 +126,10 @@ export class ClipboardCaptureService {
   private skippedSensitiveCount = 0;
   private lastDetectedAt: Date | null = null;
 
-  constructor(options?: { adapter?: IClipboardAdapter; config?: ClipboardCaptureConfig }) {
+  constructor(options?: ClipboardCaptureServiceOptions) {
     this.adapter = options?.adapter ?? new ElectronClipboardAdapter();
     this.config = validateConfig(options?.config);
+    this.persistenceSource = options?.persistenceService;
   }
 
   /**
@@ -329,7 +351,23 @@ export class ClipboardCaptureService {
       this.totalByteLength += byteLength;
       this.lastDetectedAt = item.detectedAt;
 
-      // Rule 5: Enforce history count bound
+      // Scope A: Persist newly accepted eligible text capture to encrypted persistence
+      const persistence = this.getPersistenceService();
+      if (persistence) {
+        try {
+          await persistence.saveTextClip({
+            id: item.id,
+            text: item.text,
+            createdAt: item.detectedAt,
+          });
+        } catch {
+          // Failure to persist (e.g. disabled consent, database write error, sensitive rejection)
+          // must never crash the polling loop, silently disable in-memory capture,
+          // or leak clipboard contents. In-memory capture remains active.
+        }
+      }
+
+      // Rule 6: Enforce history count bound
       while (this.history.length > this.config.maxItems) {
         const evicted = this.history.pop();
         if (evicted) {
@@ -337,7 +375,7 @@ export class ClipboardCaptureService {
         }
       }
 
-      // Rule 6: Enforce total history byte budget bound
+      // Rule 7: Enforce total history byte budget bound
       while (this.totalByteLength > this.config.maxTotalByteLength && this.history.length > 0) {
         const evicted = this.history.pop();
         if (evicted) {
@@ -348,6 +386,30 @@ export class ClipboardCaptureService {
       // Contain adapter exceptions without crashing the process
     } finally {
       this.isPollingActive = false;
+    }
+  }
+
+  /**
+   * Resolves the configured or default persistence service safely.
+   */
+  private getPersistenceService(): EncryptedClipboardPersistenceService | null {
+    if (this.persistenceSource === null) {
+      return null;
+    }
+    if (typeof this.persistenceSource === 'function') {
+      try {
+        return this.persistenceSource();
+      } catch {
+        return null;
+      }
+    }
+    if (this.persistenceSource) {
+      return this.persistenceSource;
+    }
+    try {
+      return getEncryptedClipboardPersistenceService();
+    } catch {
+      return null;
     }
   }
 }
@@ -362,10 +424,9 @@ let defaultClipboardService: ClipboardCaptureService | null = null;
  * Returns the default singleton capture service, creating it if absent.
  * Note: Capture remains stopped until explicitly started.
  */
-export function getClipboardCaptureService(options?: {
-  adapter?: IClipboardAdapter;
-  config?: ClipboardCaptureConfig;
-}): ClipboardCaptureService {
+export function getClipboardCaptureService(
+  options?: ClipboardCaptureServiceOptions,
+): ClipboardCaptureService {
   if (!defaultClipboardService) {
     defaultClipboardService = new ClipboardCaptureService(options);
   }
@@ -380,4 +441,5 @@ export function disposeClipboardCaptureService(): void {
     defaultClipboardService.stop();
     defaultClipboardService = null;
   }
+  resetEncryptedClipboardPersistenceService();
 }
