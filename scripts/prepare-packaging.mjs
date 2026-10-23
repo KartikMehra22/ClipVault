@@ -6,100 +6,117 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const rootDir = path.resolve(path.dirname(__filename), '..');
 
-console.log('=== DevDesk Packaging Preparation ===');
+console.log('=== ClipOrbit Production Packaging Preparation ===');
 console.log('Root directory:', rootDir);
 
-// 0. Install workspace dependencies
-console.log('\n[0/5] Syncing workspace dependencies...');
-execSync('pnpm install -y --config.confirmModulesPurge=false', { cwd: rootDir, stdio: 'inherit' });
+// 0. Verify workspace
+console.log('\n[0/5] Checking workspace packages...');
+const requiredPackages = [
+  'packages/contracts',
+  'packages/database',
+  'apps/renderer',
+  'apps/desktop',
+];
+for (const pkg of requiredPackages) {
+  const pkgJson = path.join(rootDir, pkg, 'package.json');
+  if (!fs.existsSync(pkgJson)) {
+    console.error(`ERROR: Missing required package: ${pkg}`);
+    process.exit(1);
+  }
+}
+console.log('✓ All required workspace packages present.');
 
-// 1. Build Frontend static export
-console.log('\n[1/5] Building Frontend static export (Next.js)...');
-execSync('pnpm --filter frontend run build', { cwd: rootDir, stdio: 'inherit' });
+// 1. Build Contracts
+console.log('\n[1/5] Building Contracts (@cliporbit/contracts)...');
+execSync('pnpm --filter @cliporbit/contracts run build', { cwd: rootDir, stdio: 'inherit' });
 
-const frontendOut = path.join(rootDir, 'frontend/out');
-if (!fs.existsSync(frontendOut)) {
-  console.error('ERROR: frontend/out was not created.');
+const contractsDist = path.join(rootDir, 'packages/contracts/dist');
+if (!fs.existsSync(contractsDist)) {
+  console.error('ERROR: packages/contracts/dist was not created.');
   process.exit(1);
 }
-console.log('✓ Frontend static export verified in frontend/out');
+console.log('✓ Contracts compiled in packages/contracts/dist');
 
-// 2. Build Backend TypeScript
-console.log('\n[2/5] Building Backend (TypeScript)...');
-execSync('pnpm --filter backend run build', { cwd: rootDir, stdio: 'inherit' });
+// 2. Build Database
+console.log('\n[2/5] Building Database (@cliporbit/database)...');
+execSync('pnpm --filter @cliporbit/database run build', { cwd: rootDir, stdio: 'inherit' });
 
-const backendDist = path.join(rootDir, 'backend/dist');
-if (!fs.existsSync(backendDist)) {
-  console.error('ERROR: backend/dist was not created.');
+const databaseDist = path.join(rootDir, 'packages/database/dist');
+if (!fs.existsSync(databaseDist)) {
+  console.error('ERROR: packages/database/dist was not created.');
   process.exit(1);
 }
-console.log('✓ Backend compiled in backend/dist');
+console.log('✓ Database compiled in packages/database/dist');
 
-// 3. Build Desktop Electron TypeScript
-console.log('\n[3/5] Building Desktop (TypeScript)...');
-execSync('pnpm --filter desktop run build', { cwd: rootDir, stdio: 'inherit' });
+// 3. Build Renderer static export
+console.log('\n[3/5] Building Renderer static export (Next.js)...');
+execSync('pnpm --filter @cliporbit/renderer run build', { cwd: rootDir, stdio: 'inherit' });
 
-const desktopDist = path.join(rootDir, 'desktop/dist');
-if (!fs.existsSync(desktopDist)) {
-  console.error('ERROR: desktop/dist was not created.');
+const rendererOut = path.join(rootDir, 'apps/renderer/out');
+const rendererIndex = path.join(rendererOut, 'index.html');
+if (!fs.existsSync(rendererIndex)) {
+  console.error('ERROR: apps/renderer/out/index.html was not created.');
   process.exit(1);
 }
-console.log('✓ Desktop compiled in desktop/dist');
+console.log('✓ Renderer static export verified in apps/renderer/out');
 
-// 4. Deploy standalone Backend to .packaging/backend
-console.log('\n[4/5] Preparing standalone production backend...');
-const backendDeployDir = path.join(rootDir, '.packaging/backend');
-if (fs.existsSync(backendDeployDir)) {
-  fs.rmSync(backendDeployDir, { recursive: true, force: true });
+// 4. Build Desktop Electron TypeScript
+console.log('\n[4/5] Building Desktop Electron (@cliporbit/desktop)...');
+execSync('pnpm --filter @cliporbit/desktop run build', { cwd: rootDir, stdio: 'inherit' });
+
+const desktopDist = path.join(rootDir, 'apps/desktop/dist');
+const mainIndex = path.join(desktopDist, 'main/index.js');
+const preloadIndex = path.join(desktopDist, 'preload/index.js');
+if (!fs.existsSync(mainIndex) || !fs.existsSync(preloadIndex)) {
+  console.error('ERROR: Desktop main or preload dist was not created.');
+  process.exit(1);
 }
-fs.mkdirSync(backendDeployDir, { recursive: true });
+console.log('✓ Desktop Electron compiled in apps/desktop/dist');
 
-execSync(
-  `pnpm --filter=backend deploy "${backendDeployDir}" --prod --legacy --node-linker=hoisted`,
-  {
-    cwd: rootDir,
-    stdio: 'inherit',
-  },
+// 5. Stage production packaging directory (.packaging)
+console.log('\n[5/5] Staging production bundle into .packaging...');
+const stagingDir = path.join(rootDir, '.packaging');
+if (fs.existsSync(stagingDir)) {
+  fs.rmSync(stagingDir, { recursive: true, force: true });
+}
+fs.mkdirSync(stagingDir, { recursive: true });
+
+// Copy renderer static export
+const stagedRenderer = path.join(stagingDir, 'renderer', 'out');
+fs.mkdirSync(path.dirname(stagedRenderer), { recursive: true });
+fs.cpSync(rendererOut, stagedRenderer, { recursive: true });
+console.log('  ↳ Renderer static assets staged to .packaging/renderer/out');
+
+// Copy Prisma schema and migrations
+const stagedPrisma = path.join(stagingDir, 'prisma');
+fs.mkdirSync(stagedPrisma, { recursive: true });
+fs.copyFileSync(
+  path.join(rootDir, 'packages/database/prisma/schema.prisma'),
+  path.join(stagedPrisma, 'schema.prisma'),
 );
+fs.cpSync(
+  path.join(rootDir, 'packages/database/prisma/migrations'),
+  path.join(stagedPrisma, 'migrations'),
+  { recursive: true },
+);
+console.log('  ↳ Prisma schema and migrations staged to .packaging/prisma');
 
-// Copy compiled backend dist files into deploy dir
-const deployDistDir = path.join(backendDeployDir, 'dist');
-fs.cpSync(backendDist, deployDistDir, { recursive: true });
-console.log('✓ Standalone production backend deployed to .packaging/backend');
+// Copy compiled desktop dist
+const stagedDesktopDist = path.join(stagingDir, 'desktop', 'dist');
+fs.mkdirSync(path.dirname(stagedDesktopDist), { recursive: true });
+fs.cpSync(desktopDist, stagedDesktopDist, { recursive: true });
+console.log('  ↳ Desktop dist staged to .packaging/desktop/dist');
 
-// 5. Ensure application icon
-console.log('\n[5/5] Checking macOS application icon...');
-const iconPath = path.join(rootDir, 'desktop/build-resources/icon.icns');
-if (!fs.existsSync(iconPath)) {
-  console.log('Generating icon.icns from favicon.ico...');
-  const tempIconset = '/tmp/devdesk_icon.iconset';
-  const tempPng = '/tmp/devdesk_icon_256.png';
-  fs.mkdirSync(tempIconset, { recursive: true });
-  execSync(
-    `sips -s format png "${path.join(rootDir, 'frontend/src/app/favicon.ico')}" --out "${tempPng}"`,
-    { stdio: 'ignore' },
-  );
-  execSync(`sips -z 16 16 "${tempPng}" --out "${tempIconset}/icon_16x16.png"`, { stdio: 'ignore' });
-  execSync(`sips -z 32 32 "${tempPng}" --out "${tempIconset}/icon_16x16@2x.png"`, {
-    stdio: 'ignore',
-  });
-  execSync(`sips -z 32 32 "${tempPng}" --out "${tempIconset}/icon_32x32.png"`, { stdio: 'ignore' });
-  execSync(`sips -z 64 64 "${tempPng}" --out "${tempIconset}/icon_32x32@2x.png"`, {
-    stdio: 'ignore',
-  });
-  execSync(`sips -z 128 128 "${tempPng}" --out "${tempIconset}/icon_128x128.png"`, {
-    stdio: 'ignore',
-  });
-  execSync(`sips -z 256 256 "${tempPng}" --out "${tempIconset}/icon_128x128@2x.png"`, {
-    stdio: 'ignore',
-  });
-  execSync(`sips -z 256 256 "${tempPng}" --out "${tempIconset}/icon_256x256.png"`, {
-    stdio: 'ignore',
-  });
-  execSync(`iconutil -c icns "${tempIconset}" -o "${iconPath}"`, { stdio: 'ignore' });
-  fs.rmSync(tempIconset, { recursive: true, force: true });
-  fs.rmSync(tempPng, { force: true });
-}
-console.log('✓ macOS icon verified at desktop/build-resources/icon.icns');
+// Copy contracts dist
+const stagedContractsDist = path.join(stagingDir, 'packages', 'contracts', 'dist');
+fs.mkdirSync(path.dirname(stagedContractsDist), { recursive: true });
+fs.cpSync(contractsDist, stagedContractsDist, { recursive: true });
 
-console.log('\n=== Preparation Complete! Ready for electron-builder ===');
+// Copy database dist
+const stagedDbDist = path.join(stagingDir, 'packages', 'database', 'dist');
+fs.mkdirSync(path.dirname(stagedDbDist), { recursive: true });
+fs.cpSync(databaseDist, stagedDbDist, { recursive: true });
+console.log('  ↳ Contracts and Database libraries staged');
+
+console.log('\n=== ClipOrbit Packaging Preparation Complete! ===');
+console.log('All static assets, database migrations, and compiled binaries staged in .packaging/');

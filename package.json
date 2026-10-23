@@ -9,13 +9,15 @@
   },
   "scripts": {
     "dev": "node scripts/ensure-ports.mjs && pnpm -r --parallel dev",
+    "build": "pnpm --filter @cliporbit/contracts build && pnpm --filter @cliporbit/database build && pnpm --filter @cliporbit/renderer build && pnpm --filter @cliporbit/desktop build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "node scripts/typecheck.mjs",
     "test": "pnpm --filter @cliporbit/desktop test && pnpm --filter @cliporbit/database test",
-    "clean": "pnpm -r --parallel exec rm -rf dist build out .next .tsbuildinfo"
+    "package:prepare": "node scripts/prepare-packaging.mjs",
+    "clean": "pnpm -r --parallel exec rm -rf dist build out .next .tsbuildinfo .packaging"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

@@ -9,6 +9,7 @@ dist/
 build/
 out/
 .next/
+.packaging/
 
 # TypeScript artifacts
 *.tsbuildinfo

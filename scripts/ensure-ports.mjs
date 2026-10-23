@@ -17,14 +17,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-// Parse ports from command line arguments or use default DevDesk ports
+// Parse ports from command line arguments or use default ClipOrbit ports (3000 for Renderer)
 const args = process.argv.slice(2);
 const targetPorts =
-  args.length > 0
-    ? args.map((p) => parseInt(p, 10)).filter((p) => !isNaN(p) && p > 0)
-    : [3000, 5001];
+  args.length > 0 ? args.map((p) => parseInt(p, 10)).filter((p) => !isNaN(p) && p > 0) : [3000];
 
-console.log(`[DevDesk] Inspecting required ports: ${targetPorts.join(', ')}...`);
+console.log(`[ClipOrbit] Inspecting required ports: ${targetPorts.join(', ')}...`);
 
 function getParentPid(pid) {
   try {
@@ -114,7 +112,15 @@ function forceKillPid(pid) {
 }
 
 function cleanNextDevStaleFiles() {
-  const nextDevLog = path.join(rootDir, 'frontend', '.next', 'dev', 'logs', 'next-development.log');
+  const nextDevLog = path.join(
+    rootDir,
+    'apps',
+    'renderer',
+    '.next',
+    'dev',
+    'logs',
+    'next-development.log',
+  );
   if (fs.existsSync(nextDevLog)) {
     try {
       fs.unlinkSync(nextDevLog);
@@ -133,7 +139,11 @@ function killStaleFrontendProcesses() {
         const pid = parseInt(line.trim(), 10);
         if (!isNaN(pid) && pid > 1 && !protectedPids.has(pid)) {
           const info = getProcessInfo(pid);
-          if (info.includes('next-server') || info.includes('DevDesk')) {
+          if (
+            info.includes('next-server') ||
+            info.includes('ClipOrbit') ||
+            info.includes('cliporbit')
+          ) {
             console.log(`  ⚠ Terminating lingering Next.js daemon (PID: ${pid})...`);
             forceKillPid(pid);
           }
@@ -208,9 +218,9 @@ for (const port of targetPorts) {
 }
 
 if (anyKilled) {
-  console.log('[DevDesk] All conflicting processes terminated. Ports are ready.\n');
+  console.log('[ClipOrbit] All conflicting processes terminated. Ports are ready.\n');
 } else {
-  console.log('[DevDesk] All required ports are free.\n');
+  console.log('[ClipOrbit] All required ports are free.\n');
 }
 
 process.exit(0);

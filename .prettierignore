@@ -10,6 +10,7 @@ dist/
 build/
 out/
 .next/
+.packaging/
 coverage/
 .nyc_output/
 
