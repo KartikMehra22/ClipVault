@@ -114,8 +114,8 @@ async function resolveRendererTarget(): Promise<{ url: string; origin: string }>
     }
   }
 
-  const outDir = resolveRendererOutDir();
-  if (app.isPackaged || process.env.NODE_ENV === 'production' || outDir) {
+  if (app.isPackaged || process.env.NODE_ENV === 'production') {
+    const outDir = resolveRendererOutDir();
     if (outDir) {
       console.log(`[ClipOrbit Main] Serving packaged renderer assets from: ${outDir}`);
       staticRendererServer = await startRendererServer(outDir);
@@ -301,7 +301,8 @@ function getReadinessStatus(): AppReadinessStatus {
   return lifecycleCoordinator.getStatus();
 }
 
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
+const isSmokeTest = process.env.CLIPORBIT_SMOKE_TEST === '1';
+const gotSingleInstanceLock = isSmokeTest || app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
   console.warn('[ClipOrbit Main] Another instance is already running. Exiting.');
