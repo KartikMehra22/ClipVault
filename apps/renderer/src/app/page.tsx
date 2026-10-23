@@ -109,6 +109,7 @@ export default function HomePage() {
   const [isLoadingAction, setIsLoadingAction] = useState<boolean>(false);
   const [persistedLoadError, setPersistedLoadError] = useState<string | null>(null);
   const [isPersistedStale, setIsPersistedStale] = useState<boolean>(false);
+  const [maskDetectedSecrets, setMaskDetectedSecrets] = useState<boolean>(true);
 
   const [activeTab, setActiveTab] = useState<NavigationTab>('history');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -303,20 +304,33 @@ export default function HomePage() {
     };
   }, [captureStatus?.isRunning, captureStatus?.isPaused, loadClips]);
 
-  // 3. Keyboard shortcut listener: Cmd/Ctrl+K to focus search input, Escape to dismiss dialogs
+  // 3. Load initial view preference and security settings
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        const searchInput = document.querySelector<HTMLInputElement>('.search-bar-input');
-        searchInput?.focus();
-      } else if (e.key === 'Escape') {
-        setIsConfirmingClear(false);
+    let isMounted = true;
+    async function loadInitialPreferences() {
+      if (typeof window !== 'undefined' && window.clipOrbit?.getAllSettings) {
+        try {
+          const settings = await window.clipOrbit.getAllSettings();
+          if (isMounted) {
+            if (
+              settings.defaultView &&
+              ['history', 'pinned', 'snippets', 'settings'].includes(settings.defaultView)
+            ) {
+              setActiveTab(settings.defaultView as NavigationTab);
+            }
+            if (typeof settings.maskDetectedSecrets === 'boolean') {
+              setMaskDetectedSecrets(settings.maskDetectedSecrets);
+            }
+          }
+        } catch {
+          // Fall back safely to defaults
+        }
       }
+    }
+    void loadInitialPreferences();
+    return () => {
+      isMounted = false;
     };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // 4. Capture Lifecycle and History Actions
@@ -420,6 +434,32 @@ export default function HomePage() {
     }
     // For in-memory unsaved clips, pin status remains preserved purely in active session memory
   }, []);
+
+  // 4b. Keyboard shortcut listener: Cmd/Ctrl+K to focus search, Cmd/Ctrl+P to pin/unpin, Escape to dismiss dialogs
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const searchInput = document.querySelector<HTMLInputElement>('.search-bar-input');
+        searchInput?.focus();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        const activeEl = document.activeElement;
+        const card = activeEl?.closest('.clip-card');
+        const clipId = card?.getAttribute('data-clip-id');
+        if (clipId) {
+          void handleTogglePin(clipId);
+        } else if (itemsRef.current.length > 0) {
+          void handleTogglePin(itemsRef.current[0].id);
+        }
+      } else if (e.key === 'Escape') {
+        setIsConfirmingClear(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleTogglePin]);
 
   const handleDelete = useCallback(async (id: string) => {
     const itemToDelete = itemsRef.current.find((item) => item.id === id);
@@ -636,6 +676,7 @@ export default function HomePage() {
             isPinnedOnly={activeTab === 'pinned'}
             isCaptureRunning={isCaptureRunning}
             loadError={persistedLoadError}
+            maskSecrets={maskDetectedSecrets}
             onRetry={() => void loadClips()}
             onStartCapture={handleStartCapture}
             onTogglePin={handleTogglePin}

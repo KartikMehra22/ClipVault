@@ -1,7 +1,18 @@
 import { useState, useEffect, type FC, type ChangeEvent } from 'react';
+import type { AppSettingsDto } from '@cliporbit/contracts';
 import { InfoIcon } from '../../components/common/Icons';
 
 export const SettingsView: FC = () => {
+  const [settings, setSettings] = useState<AppSettingsDto>({
+    clipboardPersistenceEnabled: false,
+    launchAtLogin: false,
+    defaultView: 'history',
+    excludePasswordManagers: true,
+    maskDetectedSecrets: true,
+    clearOnExit: false,
+    maxHistorySize: 1000,
+    retentionPeriod: '30',
+  });
   const [persistenceEnabled, setPersistenceEnabled] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -11,31 +22,39 @@ export const SettingsView: FC = () => {
   useEffect(() => {
     let isMounted = true;
 
-    async function loadPersistenceConsent() {
+    async function loadSettings() {
       try {
-        if (typeof window !== 'undefined' && window.clipOrbit?.getClipboardPersistenceEnabled) {
+        if (typeof window !== 'undefined' && window.clipOrbit?.getAllSettings) {
+          const loaded = await window.clipOrbit.getAllSettings();
+          if (isMounted) {
+            setSettings(loaded);
+            setPersistenceEnabled(loaded.clipboardPersistenceEnabled);
+            setIsLoading(false);
+          }
+        } else if (
+          typeof window !== 'undefined' &&
+          window.clipOrbit?.getClipboardPersistenceEnabled
+        ) {
           const enabled = await window.clipOrbit.getClipboardPersistenceEnabled();
           if (isMounted) {
             setPersistenceEnabled(Boolean(enabled));
+            setSettings((prev) => ({ ...prev, clipboardPersistenceEnabled: Boolean(enabled) }));
             setIsLoading(false);
           }
         } else {
-          // Non-Electron preview environment: strictly defaults to disabled
           if (isMounted) {
-            setPersistenceEnabled(false);
             setIsLoading(false);
           }
         }
       } catch {
         if (isMounted) {
-          setPersistenceEnabled(false);
-          setError('Failed to load persistence preference. Persistence remains disabled.');
+          setError('Failed to load settings. Defaults are in effect.');
           setIsLoading(false);
         }
       }
     }
 
-    loadPersistenceConsent();
+    loadSettings();
 
     return () => {
       isMounted = false;
@@ -52,6 +71,7 @@ export const SettingsView: FC = () => {
       if (typeof window !== 'undefined' && window.clipOrbit?.setClipboardPersistenceEnabled) {
         const updated = await window.clipOrbit.setClipboardPersistenceEnabled(targetValue);
         setPersistenceEnabled(Boolean(updated));
+        setSettings((prev) => ({ ...prev, clipboardPersistenceEnabled: Boolean(updated) }));
         setSuccessMessage(
           updated
             ? 'Encrypted local history saving is enabled.'
@@ -61,17 +81,171 @@ export const SettingsView: FC = () => {
         throw new Error('Desktop bridge is not available.');
       }
     } catch {
-      // On error, fail closed and do not claim success
       setError('Failed to update persistence preference. Local history saving remains disabled.');
       setPersistenceEnabled(false);
-      if (typeof window !== 'undefined' && window.clipOrbit?.getClipboardPersistenceEnabled) {
-        try {
-          const fallback = await window.clipOrbit.getClipboardPersistenceEnabled();
-          setPersistenceEnabled(Boolean(fallback));
-        } catch {
-          setPersistenceEnabled(false);
-        }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleLaunchAtLogin = async (e: ChangeEvent<HTMLInputElement>) => {
+    const targetValue = e.target.checked;
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setLaunchAtLogin) {
+        const updated = await window.clipOrbit.setLaunchAtLogin(targetValue);
+        setSettings((prev) => ({ ...prev, launchAtLogin: updated }));
+        setSuccessMessage(
+          updated
+            ? 'Launch at system login enabled.'
+            : 'Launch at system login disabled.',
+        );
+      } else if (typeof window !== 'undefined' && window.clipOrbit?.setSetting) {
+        await window.clipOrbit.setSetting('general.launch_at_login', String(targetValue));
+        setSettings((prev) => ({ ...prev, launchAtLogin: targetValue }));
+        setSuccessMessage(
+          targetValue
+            ? 'Launch at system login enabled.'
+            : 'Launch at system login disabled.',
+        );
       }
+    } catch {
+      setError('Failed to update launch at login setting.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangeDefaultView = async (e: ChangeEvent<HTMLSelectElement>) => {
+    const targetValue = e.target.value as 'history' | 'pinned' | 'snippets' | 'settings';
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setSetting) {
+        await window.clipOrbit.setSetting('general.default_view', targetValue);
+        setSettings((prev) => ({ ...prev, defaultView: targetValue }));
+        setSuccessMessage(
+          `Default view set to ${targetValue.charAt(0).toUpperCase() + targetValue.slice(1)}.`,
+        );
+      }
+    } catch {
+      setError('Failed to update default view.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleExcludePasswordManagers = async (e: ChangeEvent<HTMLInputElement>) => {
+    const targetValue = e.target.checked;
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setSetting) {
+        await window.clipOrbit.setSetting('privacy.exclude_vault_apps', String(targetValue));
+        setSettings((prev) => ({ ...prev, excludePasswordManagers: targetValue }));
+        setSuccessMessage(
+          targetValue
+            ? 'Password manager exclusion enabled.'
+            : 'Password manager exclusion disabled.',
+        );
+      }
+    } catch {
+      setError('Failed to update password manager exclusion.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleMaskSecrets = async (e: ChangeEvent<HTMLInputElement>) => {
+    const targetValue = e.target.checked;
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setSetting) {
+        await window.clipOrbit.setSetting('privacy.mask_sensitive_data', String(targetValue));
+        setSettings((prev) => ({ ...prev, maskDetectedSecrets: targetValue }));
+        setSuccessMessage(
+          targetValue
+            ? 'Sensitive secrets masking enabled.'
+            : 'Sensitive secrets masking disabled.',
+        );
+      }
+    } catch {
+      setError('Failed to update secret masking setting.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleClearOnExit = async (e: ChangeEvent<HTMLInputElement>) => {
+    const targetValue = e.target.checked;
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setSetting) {
+        await window.clipOrbit.setSetting('privacy.clear_on_exit', String(targetValue));
+        setSettings((prev) => ({ ...prev, clearOnExit: targetValue }));
+        setSuccessMessage(
+          targetValue
+            ? 'Clear unpinned clips on exit enabled.'
+            : 'Clear on exit disabled.',
+        );
+      }
+    } catch {
+      setError('Failed to update clear on exit preference.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangeMaxHistorySize = async (e: ChangeEvent<HTMLSelectElement>) => {
+    const targetValue = parseInt(e.target.value, 10);
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setSetting) {
+        await window.clipOrbit.setSetting('retention.max_history_size', String(targetValue));
+        setSettings((prev) => ({ ...prev, maxHistorySize: targetValue }));
+        setSuccessMessage(`Maximum history size set to ${targetValue.toLocaleString()} clips.`);
+      }
+    } catch {
+      setError('Failed to update maximum history size.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangeRetentionPeriod = async (e: ChangeEvent<HTMLSelectElement>) => {
+    const targetValue = e.target.value;
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      if (typeof window !== 'undefined' && window.clipOrbit?.setSetting) {
+        await window.clipOrbit.setSetting('retention.period', targetValue);
+        setSettings((prev) => ({ ...prev, retentionPeriod: targetValue }));
+        setSuccessMessage(
+          targetValue === 'never'
+            ? 'Retention period set to Never (manual purge only).'
+            : `Retention period set to ${targetValue} days.`,
+        );
+      }
+    } catch {
+      setError('Failed to update retention period.');
     } finally {
       setIsSaving(false);
     }
@@ -83,9 +257,8 @@ export const SettingsView: FC = () => {
       <div className="placeholder-banner">
         <InfoIcon size={16} />
         <div className="placeholder-banner-text">
-          <strong>Settings & Preferences</strong> — Local encrypted history persistence is
-          functional below under Privacy & Security. Other options illustrate planned configuration
-          settings.
+          <strong>Settings & Preferences</strong> — Configure application startup, background behavior,
+          privacy protections, and local data retention. All preferences are securely stored on this device.
         </div>
       </div>
 
@@ -102,41 +275,41 @@ export const SettingsView: FC = () => {
           <div className="settings-group">
             <div className="settings-row">
               <div className="settings-row-label">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="settings-label-title">Launch at system login</span>
-                  <span className="settings-badge-planned">Planned</span>
-                </div>
+                <span className="settings-label-title">Launch at system login</span>
                 <span className="settings-label-sub">
                   Automatically start ClipOrbit in the background on system startup.
                 </span>
               </div>
               <input
                 type="checkbox"
-                disabled
-                className="settings-toggle-disabled"
-                aria-label="Launch at system login (Planned)"
+                id="launch-at-login-toggle"
+                checked={settings.launchAtLogin}
+                disabled={isLoading || isSaving}
+                onChange={handleToggleLaunchAtLogin}
+                className="settings-toggle-checkbox"
+                aria-label="Launch at system login"
               />
             </div>
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="settings-label-title">Default view</span>
-                  <span className="settings-badge-planned">Planned</span>
-                </div>
+                <span className="settings-label-title">Default view</span>
                 <span className="settings-label-sub">
                   Select which tab opens when launching or activating the window.
                 </span>
               </div>
               <select
-                disabled
-                className="settings-select-disabled"
-                defaultValue="history"
-                aria-label="Default view (Planned)"
+                id="default-view-select"
+                value={settings.defaultView}
+                disabled={isLoading || isSaving}
+                onChange={handleChangeDefaultView}
+                className="settings-select"
+                aria-label="Default view"
               >
                 <option value="history">History</option>
                 <option value="pinned">Pinned</option>
                 <option value="snippets">Snippets</option>
+                <option value="settings">Settings</option>
               </select>
             </div>
           </div>
@@ -258,10 +431,7 @@ export const SettingsView: FC = () => {
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="settings-label-title">Exclude password managers</span>
-                  <span className="settings-badge-planned">Planned</span>
-                </div>
+                <span className="settings-label-title">Exclude password managers</span>
                 <span className="settings-label-sub">
                   Ignore clipboard events originating from 1Password, Bitwarden, KeePass, and
                   Keychain.
@@ -269,49 +439,48 @@ export const SettingsView: FC = () => {
               </div>
               <input
                 type="checkbox"
-                checked
-                readOnly
-                disabled
-                className="settings-toggle-disabled"
-                aria-label="Exclude password managers (Planned)"
+                id="exclude-password-managers-toggle"
+                checked={settings.excludePasswordManagers}
+                disabled={isLoading || isSaving}
+                onChange={handleToggleExcludePasswordManagers}
+                className="settings-toggle-checkbox"
+                aria-label="Exclude password managers"
               />
             </div>
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="settings-label-title">Mask detected secrets</span>
-                  <span className="settings-badge-planned">Planned</span>
-                </div>
+                <span className="settings-label-title">Mask detected secrets</span>
                 <span className="settings-label-sub">
                   Hide potential API keys, passwords, and private tokens until revealed.
                 </span>
               </div>
               <input
                 type="checkbox"
-                checked
-                readOnly
-                disabled
-                className="settings-toggle-disabled"
-                aria-label="Mask detected secrets (Planned)"
+                id="mask-detected-secrets-toggle"
+                checked={settings.maskDetectedSecrets}
+                disabled={isLoading || isSaving}
+                onChange={handleToggleMaskSecrets}
+                className="settings-toggle-checkbox"
+                aria-label="Mask detected secrets"
               />
             </div>
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="settings-label-title">Clear on exit</span>
-                  <span className="settings-badge-planned">Planned</span>
-                </div>
+                <span className="settings-label-title">Clear on exit</span>
                 <span className="settings-label-sub">
                   Automatically purge unpinned clipboard history when closing the application.
                 </span>
               </div>
               <input
                 type="checkbox"
-                disabled
-                className="settings-toggle-disabled"
-                aria-label="Clear on exit (Planned)"
+                id="clear-on-exit-toggle"
+                checked={settings.clearOnExit}
+                disabled={isLoading || isSaving}
+                onChange={handleToggleClearOnExit}
+                className="settings-toggle-checkbox"
+                aria-label="Clear on exit"
               />
             </div>
           </div>
@@ -329,19 +498,18 @@ export const SettingsView: FC = () => {
           <div className="settings-group">
             <div className="settings-row">
               <div className="settings-row-label">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="settings-label-title">Maximum history size</span>
-                  <span className="settings-badge-planned">Planned</span>
-                </div>
+                <span className="settings-label-title">Maximum history size</span>
                 <span className="settings-label-sub">
                   Oldest unpinned clips will be trimmed when this limit is reached.
                 </span>
               </div>
               <select
-                disabled
-                className="settings-select-disabled"
-                defaultValue="1000"
-                aria-label="Maximum history size (Planned)"
+                id="max-history-size-select"
+                value={String(settings.maxHistorySize)}
+                disabled={isLoading || isSaving}
+                onChange={handleChangeMaxHistorySize}
+                className="settings-select"
+                aria-label="Maximum history size"
               >
                 <option value="500">500 clips</option>
                 <option value="1000">1,000 clips</option>
@@ -351,19 +519,18 @@ export const SettingsView: FC = () => {
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="settings-label-title">Retention period</span>
-                  <span className="settings-badge-planned">Planned</span>
-                </div>
+                <span className="settings-label-title">Retention period</span>
                 <span className="settings-label-sub">
                   Unpinned clips older than this duration will be automatically expired.
                 </span>
               </div>
               <select
-                disabled
-                className="settings-select-disabled"
-                defaultValue="30"
-                aria-label="Retention period (Planned)"
+                id="retention-period-select"
+                value={settings.retentionPeriod}
+                disabled={isLoading || isSaving}
+                onChange={handleChangeRetentionPeriod}
+                className="settings-select"
+                aria-label="Retention period"
               >
                 <option value="7">7 days</option>
                 <option value="30">30 days</option>

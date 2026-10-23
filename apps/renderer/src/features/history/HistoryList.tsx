@@ -17,6 +17,7 @@ export interface HistoryListProps {
   isPinnedOnly?: boolean;
   isCaptureRunning?: boolean;
   loadError?: string | null;
+  maskSecrets?: boolean;
   onRetry?: () => void;
   onStartCapture?: () => void;
   onTogglePin: (id: string) => void;
@@ -31,6 +32,7 @@ export const HistoryList: FC<HistoryListProps> = ({
   isPinnedOnly = false,
   isCaptureRunning = false,
   loadError,
+  maskSecrets = true,
   onRetry,
   onStartCapture,
   onTogglePin,
@@ -144,7 +146,13 @@ export const HistoryList: FC<HistoryListProps> = ({
   return (
     <div className="clip-list-container" role="feed" aria-label="Clipboard history clips">
       {items.map((item) => (
-        <HistoryItemCard key={item.id} item={item} onTogglePin={onTogglePin} onDelete={onDelete} />
+        <HistoryItemCard
+          key={item.id}
+          item={item}
+          maskSecrets={maskSecrets}
+          onTogglePin={onTogglePin}
+          onDelete={onDelete}
+        />
       ))}
     </div>
   );

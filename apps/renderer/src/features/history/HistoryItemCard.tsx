@@ -21,13 +21,19 @@ import {
 
 export interface HistoryItemCardProps {
   item: ClipboardItem;
+  maskSecrets?: boolean;
   onTogglePin: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, onDelete }) => {
+export const HistoryItemCard: FC<HistoryItemCardProps> = ({
+  item,
+  maskSecrets = true,
+  onTogglePin,
+  onDelete,
+}) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
-  const [isRevealed, setIsRevealed] = useState<boolean>(false);
+  const [isRevealed, setIsRevealed] = useState<boolean>(!maskSecrets);
   const [copied, setCopied] = useState<boolean>(false);
   const [imageDimensions, setImageDimensions] = useState<string | null>(null);
 
@@ -99,6 +105,7 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
 
   return (
     <article
+      data-clip-id={item.id}
       className={`clip-card ${item.isPinned ? 'clip-card-pinned' : ''} ${
         isSensitive ? 'clip-card-sensitive' : ''
       }`}

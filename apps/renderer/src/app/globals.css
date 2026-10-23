@@ -1291,6 +1291,22 @@ body {
   accent-color: var(--accent-primary);
 }
 
+.settings-select {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  border: 1px solid var(--border-moderate);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-default);
+}
+
+.settings-select:focus {
+  border-color: var(--accent-primary);
+}
+
 .settings-select-disabled {
   background-color: var(--bg-canvas);
   color: var(--text-secondary);
