@@ -10,6 +10,8 @@ import type {
   SnippetMutationResult,
   CreateSnippetInputDto,
   UpdateSnippetInputDto,
+  SettingKey,
+  AppSettingsDto,
 } from '@cliporbit/contracts';
 
 // In sandboxed preload, keep imports type-only to avoid runtime node_modules resolution
@@ -29,6 +31,10 @@ const CHANNELS = {
   WRITE_CLIPBOARD_IMAGE: 'clipboard:write-image',
   GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
+  SETTINGS_GET_ALL: 'settings:get-all',
+  SETTINGS_SET_VALUE: 'settings:set-value',
+  SETTINGS_GET_LAUNCH_AT_LOGIN: 'settings:get-launch-at-login',
+  SETTINGS_SET_LAUNCH_AT_LOGIN: 'settings:set-launch-at-login',
   SNIPPETS_LIST: 'snippets:list',
   SNIPPETS_CREATE: 'snippets:create',
   SNIPPETS_UPDATE: 'snippets:update',
@@ -173,6 +179,51 @@ const desktopBridge: DesktopBridge = {
       return (await ipcRenderer.invoke(CHANNELS.SET_CLIPBOARD_PERSISTENCE, enabled)) as boolean;
     } catch (err) {
       console.error('[ClipOrbit Preload] Failed to update clipboard persistence setting:', err);
+      throw err;
+    }
+  },
+
+  getAllSettings: async (): Promise<AppSettingsDto> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SETTINGS_GET_ALL)) as AppSettingsDto;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to retrieve settings:', err);
+      return {
+        clipboardPersistenceEnabled: false,
+        launchAtLogin: false,
+        defaultView: 'history',
+        excludePasswordManagers: true,
+        maskDetectedSecrets: true,
+        clearOnExit: false,
+        maxHistorySize: 1000,
+        retentionPeriod: '30',
+      };
+    }
+  },
+
+  setSetting: async (key: SettingKey, value: string): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SETTINGS_SET_VALUE, key, value)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to update setting:', err);
+      throw err;
+    }
+  },
+
+  getLaunchAtLogin: async (): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SETTINGS_GET_LAUNCH_AT_LOGIN)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to retrieve launch at login:', err);
+      return false;
+    }
+  },
+
+  setLaunchAtLogin: async (enabled: boolean): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SETTINGS_SET_LAUNCH_AT_LOGIN, enabled)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to update launch at login:', err);
       throw err;
     }
   },

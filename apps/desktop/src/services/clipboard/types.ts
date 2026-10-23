@@ -83,6 +83,12 @@ export interface IClipboardAdapter {
    * Returns null if no image is present or clipboard is empty.
    */
   readImage?(): ClipboardImagePayload | null | Promise<ClipboardImagePayload | null>;
+
+  /**
+   * Checks whether the current clipboard contents originate from a password manager
+   * or are flagged as concealed / transient / private pasteboard types.
+   */
+  isConcealed?(): boolean | Promise<boolean>;
 }
 
 /**
@@ -113,6 +119,8 @@ export interface ClipboardCaptureConfig {
   maxItemByteLength?: number;
   /** Maximum aggregate byte length across all in-memory items (default: 32 MiB). */
   maxTotalByteLength?: number;
+  /** Optional callback to check whether password manager exclusion is active. */
+  isExcludePasswordManagersEnabled?: () => boolean | Promise<boolean>;
 }
 
 /**
@@ -123,6 +131,7 @@ export const DEFAULT_CAPTURE_CONFIG: Required<ClipboardCaptureConfig> = {
   maxItems: 100,
   maxItemByteLength: MAX_SAFE_ITEM_BYTE_LENGTH, // 64 KiB
   maxTotalByteLength: 32 * 1024 * 1024, // 32 MiB
+  isExcludePasswordManagersEnabled: () => true,
 };
 
 // ---------------------------------------------------------------------------

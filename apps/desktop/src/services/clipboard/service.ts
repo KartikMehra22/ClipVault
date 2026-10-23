@@ -315,6 +315,21 @@ export class ClipboardCaptureService {
     this.isPollingActive = true;
 
     try {
+      // Check password manager / concealed content exclusion
+      if (typeof this.adapter.isConcealed === 'function') {
+        const isConcealed = await this.adapter.isConcealed();
+        if (isConcealed) {
+          const shouldExclude =
+            typeof this.config.isExcludePasswordManagersEnabled === 'function'
+              ? await this.config.isExcludePasswordManagersEnabled()
+              : true;
+          if (shouldExclude) {
+            this.skippedSensitiveCount += 1;
+            return;
+          }
+        }
+      }
+
       const text = await this.adapter.readText();
 
       // Branch 1: Text content present

@@ -1,10 +1,14 @@
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import path from 'path';
-import { IPC_CHANNELS, type DesktopInfo } from '@cliporbit/contracts';
+import { IPC_CHANNELS, SETTING_KEYS, type DesktopInfo } from '@cliporbit/contracts';
+import { createAppSettingRepository } from '@cliporbit/database';
 import { isAuthorizedFrame } from './security';
-import { initializeDatabase, closeDatabase } from '../services/database';
+import { initializeDatabase, closeDatabase, getDatabaseClient } from '../services/database';
 import { initializeEncryptionService, disposeEncryptionService } from '../services/crypto';
-import { disposeClipboardCaptureService } from '../services/clipboard';
+import {
+  disposeClipboardCaptureService,
+  getEncryptedClipboardPersistenceService,
+} from '../services/clipboard';
 import { LifecycleCoordinator, type AppReadinessStatus } from './lifecycle';
 import { registerClipboardIpcHandlers } from './clipboardIpc';
 import { registerSettingsIpcHandlers } from './settingsIpc';
@@ -251,6 +255,26 @@ function createWindow(): BrowserWindow {
 }
 
 /**
+ * Toggles visibility of the main application window.
+ * Bound to the global keyboard shortcut ⌥ Space (Alt+Space).
+ */
+export function toggleWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isVisible() && mainWindow.isFocused()) {
+    mainWindow.hide();
+  } else {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+/**
  * Global lifecycle coordinator configured with runtime database, encryption,
  * static server, and Electron window dependencies.
  */
@@ -349,6 +373,20 @@ if (!gotSingleInstanceLock) {
       return;
     }
 
+    // Register global shortcut: ⌥ Space (Alt+Space) to summon/dismiss window
+    try {
+      const registered = globalShortcut.register('Alt+Space', () => {
+        toggleWindow();
+      });
+      if (registered) {
+        console.log('[ClipOrbit Main] Registered global shortcut ⌥ Space (Alt+Space).');
+      } else {
+        console.warn('[ClipOrbit Main] Failed to register global shortcut ⌥ Space (Alt+Space).');
+      }
+    } catch (shortcutErr) {
+      console.error('[ClipOrbit Main] Error registering global shortcut:', shortcutErr);
+    }
+
     app.on('activate', () => {
       console.log('[ClipOrbit Main] macOS application activate event received.');
       if (
@@ -372,17 +410,46 @@ if (!gotSingleInstanceLock) {
     }
 
     console.log('[ClipOrbit Main] Graceful shutdown sequence initiated...');
-    lifecycleCoordinator
-      .shutdown()
-      .then(() => {
-        console.log('[ClipOrbit Main] Graceful shutdown completed cleanly.');
-      })
-      .catch((err) => {
-        console.error('[ClipOrbit Main] Error during shutdown:', err);
-      })
-      .finally(() => {
-        app.quit();
-      });
+
+    void (async () => {
+      try {
+        globalShortcut.unregisterAll();
+      } catch {
+        // Safe containment
+      }
+
+      // Check clear on exit preference
+      try {
+        const db = getDatabaseClient();
+        if (db) {
+          const repo = createAppSettingRepository(db);
+          const clearOnExit = await repo.get(SETTING_KEYS.CLEAR_ON_EXIT);
+          if (clearOnExit === 'true') {
+            console.log(
+              '[ClipOrbit Main] Clear on exit enabled: purging unpinned clipboard history...',
+            );
+            const persistence = getEncryptedClipboardPersistenceService();
+            if (persistence) {
+              await persistence.clearAllClips({ unpinnedOnly: true });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[ClipOrbit Main] Error clearing unpinned clips on exit:', err);
+      }
+
+      lifecycleCoordinator
+        .shutdown()
+        .then(() => {
+          console.log('[ClipOrbit Main] Graceful shutdown completed cleanly.');
+        })
+        .catch((err) => {
+          console.error('[ClipOrbit Main] Error during shutdown:', err);
+        })
+        .finally(() => {
+          app.quit();
+        });
+    })();
   });
 
   app.on('window-all-closed', () => {

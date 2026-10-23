@@ -112,6 +112,8 @@ export interface IClipRepository {
   delete(id: string): Promise<boolean>;
   deleteExpired(referenceDate?: Date): Promise<number>;
   deleteAll?(options?: { unpinnedOnly?: boolean }): Promise<number>;
+  trimUnpinned?(maxCount: number): Promise<number>;
+  deleteOlderThan?(cutoffDate: Date): Promise<number>;
 }
 
 export interface IEncryptionService {
@@ -600,7 +602,19 @@ export class EncryptedClipboardPersistenceService {
    * Opportunistically purges expired clips in the background if the cleanup interval has passed.
    * Keeps storage bounded without running expensive full-table deletes on every polling check.
    */
-  public async maybePurgeExpiredClips(referenceDate?: Date): Promise<number | null> {
+  public async maybePurgeExpiredClips(
+    options?:
+      | {
+          referenceDate?: Date;
+          retentionPeriodDays?: number;
+          maxHistorySize?: number;
+        }
+      | Date,
+  ): Promise<number | null> {
+    const referenceDate = options instanceof Date ? options : options?.referenceDate;
+    const retentionPeriodDays = options instanceof Date ? undefined : options?.retentionPeriodDays;
+    const maxHistorySize = options instanceof Date ? undefined : options?.maxHistorySize;
+
     const now = Date.now();
     if (
       now - this.lastExpiryCleanupTime <
@@ -610,10 +624,50 @@ export class EncryptedClipboardPersistenceService {
     }
     this.lastExpiryCleanupTime = now;
     try {
-      return await this.deleteExpiredClips(referenceDate);
+      let totalDeleted = await this.deleteExpiredClips(referenceDate);
+      if (typeof retentionPeriodDays === 'number' && retentionPeriodDays > 0) {
+        totalDeleted += await this.purgeOlderThan(retentionPeriodDays);
+      }
+      if (typeof maxHistorySize === 'number' && maxHistorySize > 0) {
+        totalDeleted += await this.trimExcessClips(maxHistorySize);
+      }
+      return totalDeleted;
     } catch {
       // Opportunistic cleanup errors are contained safely without disrupting callers
       return null;
+    }
+  }
+
+  /**
+   * Trims excess unpinned clips to respect the configured maximum history size.
+   */
+  public async trimExcessClips(maxHistorySize: number): Promise<number> {
+    try {
+      if (typeof this.repository.trimUnpinned === 'function') {
+        return await this.repository.trimUnpinned(maxHistorySize);
+      }
+      return 0;
+    } catch (error) {
+      throw new PersistenceDatabaseError(
+        error instanceof Error ? error.message : 'Database trimUnpinned operation failed.',
+      );
+    }
+  }
+
+  /**
+   * Purges unpinned clips older than the specified retention duration in days.
+   */
+  public async purgeOlderThan(days: number): Promise<number> {
+    try {
+      if (typeof this.repository.deleteOlderThan === 'function') {
+        const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        return await this.repository.deleteOlderThan(cutoffDate);
+      }
+      return 0;
+    } catch (error) {
+      throw new PersistenceDatabaseError(
+        error instanceof Error ? error.message : 'Database deleteOlderThan operation failed.',
+      );
     }
   }
 
