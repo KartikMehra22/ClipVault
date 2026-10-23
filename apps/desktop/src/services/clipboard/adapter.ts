@@ -6,7 +6,7 @@
  * for hermetic automated unit tests.
  */
 
-import { type IClipboardAdapter } from './types';
+import { type IClipboardAdapter, type ClipboardImagePayload } from './types';
 
 /**
  * Safely resolves the Electron clipboard object at call time (not import time).
@@ -47,6 +47,84 @@ export class ElectronClipboardAdapter implements IClipboardAdapter {
       return '';
     }
   }
+
+  public async readImage(): Promise<ClipboardImagePayload | null> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cb = (this.customClipboard !== undefined ? this.customClipboard : getElectronClipboard()) as any;
+    if (!cb) {
+      return null;
+    }
+
+    // Method A: Modern Electron 44 W3C Async Clipboard API (cb.read())
+    if (typeof cb.read === 'function') {
+      try {
+        const items = await cb.read();
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            if (!item || !Array.isArray(item.types)) continue;
+            for (const type of item.types) {
+              if (typeof type === 'string' && type.startsWith('image/')) {
+                const blob = await item.getType(type);
+                if (blob && typeof blob.arrayBuffer === 'function') {
+                  const arrayBuffer = await blob.arrayBuffer();
+                  const buffer = Buffer.from(arrayBuffer);
+                  const base64 = buffer.toString('base64');
+                  const dataUrl = `data:${type};base64,${base64}`;
+                  return {
+                    dataUrl,
+                    byteLength: buffer.byteLength,
+                  };
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Fall through to legacy NativeImage check
+      }
+    }
+
+    // Method B: Legacy Electron NativeImage API (cb.readImage())
+    if (typeof cb.readImage === 'function') {
+      try {
+        const nativeImg = cb.readImage();
+        if (!nativeImg || nativeImg.isEmpty()) {
+          return null;
+        }
+        const size = nativeImg.getSize();
+        if (size.width === 0 || size.height === 0) {
+          return null;
+        }
+
+        // Constrain ultra-high-resolution images (e.g. 5K/8K captures) to max 1920px on the longest edge
+        let finalImg = nativeImg;
+        const maxDimension = 1920;
+        if (size.width > maxDimension || size.height > maxDimension) {
+          const scale = Math.min(maxDimension / size.width, maxDimension / size.height);
+          finalImg = nativeImg.resize({
+            width: Math.max(1, Math.round(size.width * scale)),
+            height: Math.max(1, Math.round(size.height * scale)),
+            quality: 'good',
+          });
+        }
+
+        const pngBuf = finalImg.toPNG();
+        const finalSize = finalImg.getSize();
+        const dataUrl = finalImg.toDataURL();
+
+        return {
+          dataUrl,
+          byteLength: pngBuf.byteLength,
+          width: finalSize.width,
+          height: finalSize.height,
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  }
 }
 
 /**
@@ -55,7 +133,9 @@ export class ElectronClipboardAdapter implements IClipboardAdapter {
  */
 export class FakeClipboardAdapter implements IClipboardAdapter {
   private currentText = '';
+  private currentImage: ClipboardImagePayload | null = null;
   private readCount = 0;
+  private imageReadCount = 0;
   private simulatedError: Error | null = null;
 
   constructor(initialText = '') {
@@ -63,10 +143,17 @@ export class FakeClipboardAdapter implements IClipboardAdapter {
   }
 
   /**
-   * Updates the simulated clipboard content.
+   * Updates the simulated clipboard text.
    */
   public setText(text: string): void {
     this.currentText = text;
+  }
+
+  /**
+   * Updates the simulated clipboard image.
+   */
+  public setImage(image: ClipboardImagePayload | null): void {
+    this.currentImage = image;
   }
 
   /**
@@ -81,6 +168,17 @@ export class FakeClipboardAdapter implements IClipboardAdapter {
   }
 
   /**
+   * Reads current simulated clipboard image and tracks image read invocations.
+   */
+  public readImage(): ClipboardImagePayload | null {
+    this.imageReadCount += 1;
+    if (this.simulatedError) {
+      throw this.simulatedError;
+    }
+    return this.currentImage;
+  }
+
+  /**
    * Returns how many times readText() has been called.
    */
   public getReadCount(): number {
@@ -88,14 +186,22 @@ export class FakeClipboardAdapter implements IClipboardAdapter {
   }
 
   /**
-   * Resets read counter to zero.
+   * Returns how many times readImage() has been called.
    */
-  public resetReadCount(): void {
-    this.readCount = 0;
+  public getImageReadCount(): number {
+    return this.imageReadCount;
   }
 
   /**
-   * Configures an error to be thrown on subsequent readText() calls, or null to clear.
+   * Resets read counters to zero.
+   */
+  public resetReadCount(): void {
+    this.readCount = 0;
+    this.imageReadCount = 0;
+  }
+
+  /**
+   * Configures an error to be thrown on subsequent read calls, or null to clear.
    */
   public simulateError(error: Error | null): void {
     this.simulatedError = error;

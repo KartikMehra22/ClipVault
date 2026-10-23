@@ -26,6 +26,7 @@ const CHANNELS = {
   DELETE_CLIP: 'clipboard:delete',
   CLEAR_HISTORY: 'clipboard:clear',
   WRITE_CLIPBOARD_TEXT: 'clipboard:write-text',
+  WRITE_CLIPBOARD_IMAGE: 'clipboard:write-image',
   GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
   SNIPPETS_LIST: 'snippets:list',
@@ -145,6 +146,15 @@ const desktopBridge: DesktopBridge = {
       return (await ipcRenderer.invoke(CHANNELS.WRITE_CLIPBOARD_TEXT, text)) as boolean;
     } catch (err) {
       console.error('[ClipOrbit Preload] Failed to write text to clipboard:', err);
+      return false;
+    }
+  },
+
+  writeClipboardImage: async (dataUrl: string): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.WRITE_CLIPBOARD_IMAGE, dataUrl)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to write image to clipboard:', err);
       return false;
     }
   },

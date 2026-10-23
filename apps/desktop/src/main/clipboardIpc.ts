@@ -32,6 +32,7 @@ export interface ClipboardIpcOptions {
   isAuthorized?: (event: IpcMainInvokeEvent) => boolean;
   isShutdown?: () => boolean;
   clipboardWriter?: (text: string) => void;
+  clipboardImageWriter?: (dataUrl: string) => void;
 }
 
 /**
@@ -80,7 +81,10 @@ export function serializePersistedClips(clips: DecryptedClipRecord[]): Persisted
         ? clip.createdAt.toISOString()
         : new Date(clip.createdAt).toISOString(),
     byteLength: Number(clip.byteLength),
-    category: classifyText(clip.text),
+    category:
+      clip.contentType.startsWith('image/') || clip.text.startsWith('data:image/')
+        ? 'image'
+        : classifyText(clip.text),
     isPinned: Boolean(clip.isPinned),
     sourceApp: clip.sourceApp ?? null,
   }));
@@ -297,6 +301,54 @@ export function createClipboardIpcHandlers(options?: ClipboardIpcOptions) {
 
       throw new Error('Clipboard writer is unavailable in this environment.');
     },
+
+    handleWriteClipboardImage: async (event: IpcMainInvokeEvent, dataUrl: unknown): Promise<boolean> => {
+      validateRequest(event);
+
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+        throw new Error('Clipboard image must be a valid data URL.');
+      }
+
+      if (options?.clipboardImageWriter) {
+        options.clipboardImageWriter(dataUrl);
+        return true;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cb = clipboard as any;
+      if (cb) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const electron = require('electron');
+
+          // Method A: Modern Electron 44 W3C Clipboard API (cb.write([item]))
+          if (typeof cb.write === 'function' && electron.ClipboardItem) {
+            const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+            if (match) {
+              const mimeType = match[1];
+              const buffer = Buffer.from(match[2], 'base64');
+              const blob = new Blob([buffer], { type: mimeType });
+              const item = new electron.ClipboardItem({ [mimeType]: blob });
+              await cb.write([item]);
+              return true;
+            }
+          }
+
+          // Method B: Legacy Electron NativeImage API (cb.writeImage(img))
+          if (typeof cb.writeImage === 'function' && electron.nativeImage) {
+            const img = electron.nativeImage.createFromDataURL(dataUrl);
+            if (!img.isEmpty()) {
+              cb.writeImage(img);
+              return true;
+            }
+          }
+        } catch {
+          return false;
+        }
+      }
+
+      throw new Error('Clipboard image writer is unavailable in this environment.');
+    },
   };
 }
 
@@ -324,6 +376,9 @@ export function registerClipboardIpcHandlers(options?: ClipboardIpcOptions): voi
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_CLEAR, handlers.handleClearHistory);
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_WRITE_TEXT, (event, text) =>
     handlers.handleWriteClipboardText(event, text),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_WRITE_IMAGE, (event, dataUrl) =>
+    handlers.handleWriteClipboardImage(event, dataUrl),
   );
 
   console.log('[ClipOrbit Main] Registered secure clipboard IPC handlers.');

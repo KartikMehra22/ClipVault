@@ -20,6 +20,7 @@ import {
   type IClipboardAdapter,
   DEFAULT_CAPTURE_CONFIG,
   MAX_SAFE_ITEM_BYTE_LENGTH,
+  MAX_SAFE_IMAGE_BYTE_LENGTH,
   ClipboardValidationError,
 } from './types';
 import { classifyText } from './classifier';
@@ -274,9 +275,16 @@ export class ClipboardCaptureService {
       const text = await this.adapter.readText();
       if (text && typeof text === 'string' && text.length > 0) {
         this.lastFingerprint = computeFingerprint(text);
-      } else {
-        this.lastFingerprint = null;
+        return;
       }
+      if (typeof this.adapter.readImage === 'function') {
+        const img = await this.adapter.readImage();
+        if (img && typeof img.dataUrl === 'string' && img.dataUrl.length > 0) {
+          this.lastFingerprint = computeFingerprint(img.dataUrl);
+          return;
+        }
+      }
+      this.lastFingerprint = null;
     } catch {
       this.lastFingerprint = null;
     }
@@ -309,83 +317,128 @@ export class ClipboardCaptureService {
     try {
       const text = await this.adapter.readText();
 
-      // Rule 1: Ignore empty or non-string values
-      if (!text || typeof text !== 'string' || text.length === 0) {
-        return;
-      }
-
-      // Rule 2: Compute fingerprint and detect changes
-      const fingerprint = computeFingerprint(text);
-      if (fingerprint === this.lastFingerprint) {
-        // Content unchanged
-        return;
-      }
-
-      // Value has changed: update last observed fingerprint
-      this.lastFingerprint = fingerprint;
-
-      // Rule 3: Enforce single-item byte size limit
-      const byteLength = Buffer.byteLength(text, 'utf8');
-      if (byteLength > this.config.maxItemByteLength) {
-        this.skippedOversizedCount += 1;
-        return;
-      }
-
-      // Rule 4: Enforce sensitive-content filtering
-      // High-confidence sensitive items must never enter history or be retained.
-      try {
-        const detection = detectSensitiveContent(text);
-        if (detection.isSensitive) {
-          this.skippedSensitiveCount += 1;
+      // Branch 1: Text content present
+      if (text && typeof text === 'string' && text.length > 0) {
+        // Rule 2: Compute fingerprint and detect changes
+        const fingerprint = computeFingerprint(text);
+        if (fingerprint === this.lastFingerprint) {
+          // Content unchanged
           return;
         }
-        if (detection.exceededScanLimit) {
-          // Defense-in-depth: If the item exceeded the safe scanning limit, skip conservatively as oversized
+
+        // Value has changed: update last observed fingerprint
+        this.lastFingerprint = fingerprint;
+
+        // Rule 3: Enforce single-item byte size limit
+        const byteLength = Buffer.byteLength(text, 'utf8');
+        if (byteLength > this.config.maxItemByteLength) {
           this.skippedOversizedCount += 1;
           return;
         }
-      } catch {
-        // Fail-safe: if detector throws, treat as sensitive and exclude rather than leaking
-        this.skippedSensitiveCount += 1;
-        return;
-      }
 
-      // Rule 5: Create new captured item
-      const category = classifyText(text);
-      const item: CapturedTextItem = {
-        id: crypto.randomUUID(),
-        text,
-        detectedAt: new Date(),
-        byteLength,
-        category,
-      };
-
-      // Add to front of history (most recent first)
-      this.history.unshift(item);
-      this.totalByteLength += byteLength;
-      this.lastDetectedAt = item.detectedAt;
-
-      // Scope A: Persist newly accepted eligible text capture to encrypted persistence
-      const persistence = this.getPersistenceService();
-      if (persistence) {
+        // Rule 4: Enforce sensitive-content filtering
+        // High-confidence sensitive items must never enter history or be retained.
         try {
-          await persistence.saveTextClip({
-            id: item.id,
-            text: item.text,
-            createdAt: item.detectedAt,
-          });
+          const detection = detectSensitiveContent(text);
+          if (detection.isSensitive) {
+            this.skippedSensitiveCount += 1;
+            return;
+          }
+          if (detection.exceededScanLimit) {
+            // Defense-in-depth: If the item exceeded the safe scanning limit, skip conservatively as oversized
+            this.skippedOversizedCount += 1;
+            return;
+          }
         } catch {
-          // Failure to persist (e.g. disabled consent, database write error, sensitive rejection)
-          // must never crash the polling loop, silently disable in-memory capture,
-          // or leak clipboard contents. In-memory capture remains active.
+          // Fail-safe: if detector throws, treat as sensitive and exclude rather than leaking
+          this.skippedSensitiveCount += 1;
+          return;
         }
+
+        // Rule 5: Create new captured item
+        const category = classifyText(text);
+        const item: CapturedTextItem = {
+          id: crypto.randomUUID(),
+          text,
+          detectedAt: new Date(),
+          byteLength,
+          category,
+        };
+
+        // Add to front of history (most recent first)
+        this.history.unshift(item);
+        this.totalByteLength += byteLength;
+        this.lastDetectedAt = item.detectedAt;
+
+        // Persist newly accepted eligible text capture to encrypted persistence
+        const persistence = this.getPersistenceService();
+        if (persistence) {
+          try {
+            await persistence.saveTextClip({
+              id: item.id,
+              text: item.text,
+              createdAt: item.detectedAt,
+              contentType: 'text/plain',
+            });
+          } catch {
+            // Failure to persist must never crash the polling loop
+          }
+        }
+      } else if (typeof this.adapter.readImage === 'function') {
+        // Branch 2: No text on clipboard; check for image payload
+        const img = await this.adapter.readImage();
+        if (img && typeof img.dataUrl === 'string' && img.dataUrl.length > 0) {
+          const fingerprint = computeFingerprint(img.dataUrl);
+          if (fingerprint === this.lastFingerprint) {
+            // Image content unchanged
+            return;
+          }
+
+          this.lastFingerprint = fingerprint;
+
+          // Enforce image safe size ceiling (10 MiB)
+          if (img.byteLength > MAX_SAFE_IMAGE_BYTE_LENGTH) {
+            this.skippedOversizedCount += 1;
+            return;
+          }
+
+          const item: CapturedTextItem = {
+            id: crypto.randomUUID(),
+            text: img.dataUrl,
+            detectedAt: new Date(),
+            byteLength: img.byteLength,
+            category: 'image',
+          };
+
+          this.history.unshift(item);
+          this.totalByteLength += item.byteLength;
+          this.lastDetectedAt = item.detectedAt;
+
+          const persistence = this.getPersistenceService();
+          if (persistence) {
+            try {
+              await persistence.saveTextClip({
+                id: item.id,
+                text: item.text,
+                createdAt: item.detectedAt,
+                contentType: 'image/png',
+              });
+            } catch {
+              // Failure to persist must never crash the polling loop
+            }
+          }
+        } else {
+          return;
+        }
+      } else {
+        return;
       }
 
       // Rule 6: Enforce history count bound
       while (this.history.length > this.config.maxItems) {
         const evicted = this.history.pop();
         if (evicted) {
-          this.totalByteLength -= evicted.byteLength;
+          this.totalByteLength = Math.max(0, this.totalByteLength - evicted.byteLength);
         }
       }
 
@@ -393,7 +446,7 @@ export class ClipboardCaptureService {
       while (this.totalByteLength > this.config.maxTotalByteLength && this.history.length > 0) {
         const evicted = this.history.pop();
         if (evicted) {
-          this.totalByteLength -= evicted.byteLength;
+          this.totalByteLength = Math.max(0, this.totalByteLength - evicted.byteLength);
         }
       }
     } catch {

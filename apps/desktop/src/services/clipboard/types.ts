@@ -10,23 +10,37 @@
  * Organizational category detected for captured text content.
  * Note: Classification is metadata for organization, not a security assessment.
  */
-export type ContentCategory = 'url' | 'email' | 'code' | 'text';
+export type ContentCategory = 'url' | 'email' | 'code' | 'text' | 'image';
 
 /**
- * An individual captured clipboard text entry stored in process memory.
+ * Image payload read from the system clipboard.
+ */
+export interface ClipboardImagePayload {
+  /** Complete base64 Data URL (e.g. data:image/png;base64,...) */
+  dataUrl: string;
+  /** Binary byte length of the image payload */
+  byteLength: number;
+  /** Image pixel width */
+  width?: number;
+  /** Image pixel height */
+  height?: number;
+}
+
+/**
+ * An individual captured clipboard entry stored in process memory.
  *
  * PRIVACY NOTICE:
  * This in-memory record can contain sensitive plaintext while capture is active.
- * Persistence to disk or database is strictly prohibited in this phase.
+ * Persistence to disk or database is strictly governed by user consent.
  */
 export interface CapturedTextItem {
   /** Unique in-memory identifier (UUID v4) not derived from content. */
   id: string;
-  /** Captured plaintext content. */
+  /** Captured plaintext content or image data URL. */
   text: string;
   /** Timestamp when the change was detected by the polling engine. */
   detectedAt: Date;
-  /** Actual UTF-8 byte length of the content. */
+  /** Actual UTF-8 / payload byte length of the content. */
   byteLength: number;
   /** Categorization determined by deterministic heuristics. */
   category: ContentCategory;
@@ -54,7 +68,7 @@ export interface ClipboardCaptureStatus {
 }
 
 /**
- * Abstract interface for reading clipboard text.
+ * Abstract interface for reading clipboard text and images.
  * Allows decoupling from Electron's native clipboard module during automated tests.
  */
 export interface IClipboardAdapter {
@@ -63,14 +77,26 @@ export interface IClipboardAdapter {
    * Returns empty string if no text is present or clipboard is empty.
    */
   readText(): string | Promise<string>;
+
+  /**
+   * Reads the current image from the clipboard.
+   * Returns null if no image is present or clipboard is empty.
+   */
+  readImage?(): ClipboardImagePayload | null | Promise<ClipboardImagePayload | null>;
 }
 
 /**
- * Maximum safe UTF-8 byte length permitted for any single clipboard item.
+ * Maximum safe UTF-8 byte length permitted for any single clipboard text item.
  * Exactly matches the sensitive detector's safe scanning ceiling (64 KiB = 65,536 bytes).
  * Ensures items are never accepted after scanning only a truncated prefix.
  */
 export const MAX_SAFE_ITEM_BYTE_LENGTH = 64 * 1024; // 64 KiB = 65,536 bytes
+
+/**
+ * Maximum safe byte length permitted for captured image entries (10 MiB).
+ * Large screenshots or high-res captures are safely bounded to prevent unbounded memory growth.
+ */
+export const MAX_SAFE_IMAGE_BYTE_LENGTH = 10 * 1024 * 1024; // 10 MiB = 10,485,760 bytes
 
 /**
  * Configuration options for the clipboard capture service.
@@ -85,7 +111,7 @@ export interface ClipboardCaptureConfig {
    * Must not exceed MAX_SAFE_ITEM_BYTE_LENGTH to guarantee complete sensitive-content scanning.
    */
   maxItemByteLength?: number;
-  /** Maximum aggregate byte length across all in-memory items (default: 4 MiB = 4,194,304 bytes). */
+  /** Maximum aggregate byte length across all in-memory items (default: 32 MiB). */
   maxTotalByteLength?: number;
 }
 
@@ -96,7 +122,7 @@ export const DEFAULT_CAPTURE_CONFIG: Required<ClipboardCaptureConfig> = {
   pollingIntervalMs: 600,
   maxItems: 100,
   maxItemByteLength: MAX_SAFE_ITEM_BYTE_LENGTH, // 64 KiB
-  maxTotalByteLength: 4 * 1024 * 1024, // 4 MiB
+  maxTotalByteLength: 32 * 1024 * 1024, // 32 MiB
 };
 
 // ---------------------------------------------------------------------------

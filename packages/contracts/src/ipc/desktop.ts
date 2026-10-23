@@ -35,6 +35,7 @@ export interface DesktopBridge {
   deleteClip(id: string): Promise<boolean>;
   clearHistory(): Promise<ClearHistoryResult>;
   writeClipboardText(text: string): Promise<boolean>;
+  writeClipboardImage?(dataUrl: string): Promise<boolean>;
   getClipboardPersistenceEnabled(): Promise<boolean>;
   setClipboardPersistenceEnabled(enabled: boolean): Promise<boolean>;
   getSnippets(options?: { language?: string }): Promise<SnippetsResult>;
@@ -56,6 +57,7 @@ export const IPC_CHANNELS = {
   CLIPBOARD_DELETE: 'clipboard:delete',
   CLIPBOARD_CLEAR: 'clipboard:clear',
   CLIPBOARD_WRITE_TEXT: 'clipboard:write-text',
+  CLIPBOARD_WRITE_IMAGE: 'clipboard:write-image',
   SETTINGS_GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SETTINGS_SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
   SNIPPETS_LIST: 'snippets:list',

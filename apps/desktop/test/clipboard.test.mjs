@@ -557,3 +557,110 @@ test('Classifier - defaults to plain text for regular sentences and paragraphs',
   assert.equal(classifyText('ClipOrbit is a secure clipboard manager.'), 'text');
   assert.equal(classifyText(''), 'text');
 });
+
+test('Classifier - accurately identifies image content from data URL', () => {
+  assert.equal(classifyText('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), 'image');
+  assert.equal(classifyText('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP...'), 'image');
+  assert.equal(classifyText('data:image/webp;base64,UklGRk...'), 'image');
+});
+
+test('ClipboardCapture - captures copied images when clipboard text is empty', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+  assert.equal(service.getRecentItems().length, 0);
+
+  const testImage = {
+    dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    byteLength: 68,
+    width: 1,
+    height: 1,
+  };
+
+  adapter.setImage(testImage);
+  await service.pollNow();
+
+  const items = service.getRecentItems();
+  assert.equal(items.length, 1);
+  assert.equal(items[0].category, 'image');
+  assert.equal(items[0].text, testImage.dataUrl);
+  assert.equal(items[0].byteLength, 68);
+
+  // Unchanged image poll does not create duplicate
+  await service.pollNow();
+  assert.equal(service.getRecentItems().length, 1);
+
+  service.stop();
+});
+
+test('ClipboardCapture - establishes baseline with pre-existing clipboard image', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const initialImage = {
+    dataUrl: 'data:image/png;base64,existingImage',
+    byteLength: 50,
+  };
+  adapter.setImage(initialImage);
+
+  const service = new ClipboardCaptureService({ adapter });
+  await service.start();
+
+  // Baseline image must not be emitted
+  assert.equal(service.getRecentItems().length, 0);
+
+  // Unchanged image poll
+  await service.pollNow();
+  assert.equal(service.getRecentItems().length, 0);
+
+  // New image copied
+  const newImage = {
+    dataUrl: 'data:image/png;base64,newlyCopiedImage',
+    byteLength: 80,
+  };
+  adapter.setImage(newImage);
+  await service.pollNow();
+
+  assert.equal(service.getRecentItems().length, 1);
+  assert.equal(service.getRecentItems()[0].text, newImage.dataUrl);
+
+  service.stop();
+});
+
+test('ClipboardCapture - transitions between copied text and copied images', async () => {
+  const adapter = new FakeClipboardAdapter('');
+  const service = new ClipboardCaptureService({ adapter });
+
+  await service.start();
+
+  // 1. Copy text
+  adapter.setText('Hello world');
+  adapter.setImage(null);
+  await service.pollNow();
+
+  assert.equal(service.getRecentItems().length, 1);
+  assert.equal(service.getRecentItems()[0].category, 'text');
+
+  // 2. Copy image (text cleared, image populated)
+  adapter.setText('');
+  adapter.setImage({
+    dataUrl: 'data:image/png;base64,myScreenshot',
+    byteLength: 500,
+  });
+  await service.pollNow();
+
+  assert.equal(service.getRecentItems().length, 2);
+  assert.equal(service.getRecentItems()[0].category, 'image');
+  assert.equal(service.getRecentItems()[1].category, 'text');
+
+  // 3. Copy text again
+  adapter.setText('Another snippet');
+  adapter.setImage(null);
+  await service.pollNow();
+
+  assert.equal(service.getRecentItems().length, 3);
+  assert.equal(service.getRecentItems()[0].category, 'text');
+  assert.equal(service.getRecentItems()[1].category, 'image');
+
+  service.stop();
+});
+

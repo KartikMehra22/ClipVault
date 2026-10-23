@@ -47,7 +47,8 @@ function formatCopiedAt(timestamp: string | Date): string {
  * Strictly avoids displaying raw ciphertext or cryptographic fields.
  */
 export function mapMergedClipDtoToItem(dto: MergedClipDto): ClipboardItem {
-  const type: ClipboardContentType = dto.category === 'url' ? 'link' : dto.category;
+  const isImage = dto.category === 'image' || dto.text.startsWith('data:image/');
+  const type: ClipboardContentType = isImage ? 'image' : dto.category === 'url' ? 'link' : dto.category;
 
   let domain: string | undefined;
   if (dto.category === 'url') {
@@ -58,18 +59,26 @@ export function mapMergedClipDtoToItem(dto: MergedClipDto): ClipboardItem {
     }
   }
 
-  const charCount = dto.text.length;
-  const wordCount = dto.text.trim().split(/\s+/).filter(Boolean).length;
+  const charCount = isImage ? undefined : dto.text.length;
+  const wordCount = isImage ? undefined : dto.text.trim().split(/\s+/).filter(Boolean).length;
   const copiedAt = formatCopiedAt(dto.createdAt);
 
   let previewTitle: string | undefined;
   if (dto.category === 'url') {
     previewTitle = domain || 'Web Link';
+  } else if (isImage) {
+    previewTitle = 'Image';
   } else {
     const firstLine = dto.text.split('\n')[0].trim();
     if (firstLine.length > 0) {
       previewTitle = firstLine.length > 40 ? `${firstLine.slice(0, 40)}...` : firstLine;
     }
+  }
+
+  let dimensions: string | undefined;
+  if (isImage) {
+    const kb = Math.round(dto.byteLength / 1024);
+    dimensions = kb > 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
   }
 
   return {
@@ -84,6 +93,7 @@ export function mapMergedClipDtoToItem(dto: MergedClipDto): ClipboardItem {
       charCount,
       wordCount,
       domain,
+      dimensions,
       isSensitive: false,
     },
   };

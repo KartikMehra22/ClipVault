@@ -117,6 +117,10 @@ export function classifyText(text: string): ContentCategory {
     return 'text';
   }
 
+  if (text.startsWith('data:image/')) {
+    return 'image';
+  }
+
   if (isUrl(text)) {
     return 'url';
   }

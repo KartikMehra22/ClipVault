@@ -3,7 +3,7 @@
  * Phase 5.2: Secure Clipboard Controls and Live History UI
  */
 
-export type ClipCategory = 'url' | 'email' | 'code' | 'text';
+export type ClipCategory = 'url' | 'email' | 'code' | 'text' | 'image';
 
 /**
  * Safe, serialized representation of an in-memory captured clip entry for renderer consumption.

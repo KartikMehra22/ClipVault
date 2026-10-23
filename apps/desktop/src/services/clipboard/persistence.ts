@@ -33,7 +33,7 @@ import {
   getEncryptionService,
 } from '../crypto';
 import { getDatabaseClient } from '../database';
-import { MAX_SAFE_ITEM_BYTE_LENGTH } from './types';
+import { MAX_SAFE_ITEM_BYTE_LENGTH, MAX_SAFE_IMAGE_BYTE_LENGTH } from './types';
 import { detectSensitiveContent, type SensitiveDetectionResult } from './sensitiveContentDetector';
 import { getClipboardPersistencePolicy } from './consent';
 
@@ -135,6 +135,7 @@ export interface SaveTextClipInput {
   expiresAt?: Date | null;
   createdAt?: Date;
   id?: string;
+  contentType?: string;
 }
 
 export interface SavedClipResult {
@@ -266,18 +267,25 @@ export class EncryptedClipboardPersistenceService {
         throw new PersistenceValidationError('Clip text must be a non-empty string.');
       }
 
-      // 2. Validate UTF-8 byte length using the safe 64 KiB scanning ceiling
+      const isImage =
+        (typeof input.contentType === 'string' && input.contentType.startsWith('image/')) ||
+        input.text.startsWith('data:image/');
+      const maxLimit = isImage ? MAX_SAFE_IMAGE_BYTE_LENGTH : MAX_SAFE_ITEM_BYTE_LENGTH;
+
+      // 2. Validate UTF-8 byte length using safe limit
       const byteLength = Buffer.byteLength(input.text, 'utf8');
-      if (byteLength > MAX_SAFE_ITEM_BYTE_LENGTH) {
+      if (byteLength > maxLimit) {
         throw new PersistenceValidationError(
-          `Payload size (${byteLength} bytes) exceeds maximum safe scanning limit of ${MAX_SAFE_ITEM_BYTE_LENGTH} bytes.`,
+          `Payload size (${byteLength} bytes) exceeds maximum safe limit of ${maxLimit} bytes.`,
         );
       }
 
-      // 3. Sensitive content detection at the persistence boundary
-      const detection = this.sensitiveDetector(input.text);
-      if (detection.isSensitive || detection.exceededScanLimit) {
-        throw new PersistenceSensitiveContentError();
+      // 3. Sensitive content detection at the persistence boundary (text only)
+      if (!isImage) {
+        const detection = this.sensitiveDetector(input.text);
+        if (detection.isSensitive || detection.exceededScanLimit) {
+          throw new PersistenceSensitiveContentError();
+        }
       }
 
       // 4. Encode safe text as UTF-8 bytes
@@ -314,7 +322,7 @@ export class EncryptedClipboardPersistenceService {
       try {
         savedClip = await this.repository.create({
           ...(input.id ? { id: input.id } : {}),
-          contentType: 'text/plain',
+          contentType: input.contentType ?? (isImage ? 'image/png' : 'text/plain'),
           encryptedPayload: encryptionFields.encryptedPayload,
           encryptionNonce: encryptionFields.encryptionNonce,
           encryptionAuthTag: encryptionFields.encryptionAuthTag,
@@ -416,9 +424,14 @@ export class EncryptedClipboardPersistenceService {
       }
 
       // 3. Validate decrypted payload byte length against recorded metadata
+      const isImage =
+        record.contentType.startsWith('image/') ||
+        record.contentType === 'image';
+      const maxAllowedBytes = isImage ? MAX_SAFE_IMAGE_BYTE_LENGTH : MAX_SAFE_ITEM_BYTE_LENGTH;
+
       if (
         decryptedBytes.byteLength !== record.payloadByteLength ||
-        decryptedBytes.byteLength > MAX_SAFE_ITEM_BYTE_LENGTH
+        decryptedBytes.byteLength > maxAllowedBytes
       ) {
         skippedCorruptCount++;
         continue;
@@ -427,11 +440,14 @@ export class EncryptedClipboardPersistenceService {
       // 4. Decode payload as UTF-8 string
       const decryptedText = decryptedBytes.toString('utf8');
 
-      // 5. Re-run sensitive-content detector on decrypted text before exposing
-      const detection = this.sensitiveDetector(decryptedText);
-      if (detection.isSensitive || detection.exceededScanLimit) {
-        skippedSensitiveCount++;
-        continue;
+      // 5. Re-run sensitive-content detector on decrypted text before exposing (for non-image items)
+      const isDecryptedImage = isImage || decryptedText.startsWith('data:image/');
+      if (!isDecryptedImage) {
+        const detection = this.sensitiveDetector(decryptedText);
+        if (detection.isSensitive || detection.exceededScanLimit) {
+          skippedSensitiveCount++;
+          continue;
+        }
       }
 
       clips.push({

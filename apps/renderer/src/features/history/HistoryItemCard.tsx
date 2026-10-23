@@ -29,14 +29,26 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [isRevealed, setIsRevealed] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [imageDimensions, setImageDimensions] = useState<string | null>(null);
 
   const handleCopy = async () => {
-    if (typeof window !== 'undefined' && window.clipOrbit?.writeClipboardText) {
+    if (typeof window !== 'undefined') {
       try {
-        const success = await window.clipOrbit.writeClipboardText(item.content);
-        if (success) {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
+        if (item.type === 'image' && window.clipOrbit?.writeClipboardImage) {
+          const success = await window.clipOrbit.writeClipboardImage(item.content);
+          if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }
+          return;
+        }
+
+        if (window.clipOrbit?.writeClipboardText) {
+          const success = await window.clipOrbit.writeClipboardText(item.content);
+          if (success) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }
         }
       } catch (err) {
         console.error('[ClipOrbit Renderer] Failed to copy clip to clipboard:', err);
@@ -45,7 +57,8 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
   };
 
   const isSensitive = Boolean(item.metadata?.isSensitive);
-  const isMultiLine = item.content.includes('\n') || item.content.length > 120;
+  const isMultiLine =
+    item.type !== 'image' && (item.content.includes('\n') || item.content.length > 120);
 
   const getTypeIcon = () => {
     switch (item.type) {
@@ -106,8 +119,8 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
 
           {item.metadata?.domain && <span className="clip-meta-tag">{item.metadata.domain}</span>}
 
-          {item.metadata?.dimensions && (
-            <span className="clip-meta-tag">{item.metadata.dimensions}</span>
+          {(imageDimensions || item.metadata?.dimensions) && (
+            <span className="clip-meta-tag">{imageDimensions || item.metadata?.dimensions}</span>
           )}
 
           {isSensitive && (
@@ -176,6 +189,21 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
         {isSensitive && !isRevealed ? (
           <div className="clip-content-masked">
             <code>••••••••••••••••••••••••••••••••••••••••</code>
+          </div>
+        ) : item.type === 'image' ? (
+          <div className="clip-content-image-wrapper">
+            <img
+              src={item.content}
+              alt="Copied clipboard item"
+              className="clip-image-preview"
+              loading="lazy"
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth && img.naturalHeight) {
+                  setImageDimensions(`${img.naturalWidth} × ${img.naturalHeight} px`);
+                }
+              }}
+            />
           </div>
         ) : item.type === 'code' ? (
           <pre

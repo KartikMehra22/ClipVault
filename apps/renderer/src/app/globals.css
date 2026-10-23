@@ -965,6 +965,26 @@ body {
   overflow: hidden;
 }
 
+.clip-content-image-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem;
+  overflow: hidden;
+  max-height: 240px;
+}
+
+.clip-image-preview {
+  max-width: 100%;
+  max-height: 224px;
+  object-fit: contain;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
 .clip-card-footer {
   display: flex;
   align-items: center;

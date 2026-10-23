@@ -185,15 +185,18 @@ export function resolvePrismaAssets(
 
   if (!prismaCliPath) {
     const candidateCliPaths = [
-      // Relative to compiled dist/services/ (4 levels to workspace root)
-      path.resolve(__dirname, '../../../../packages/database/node_modules/prisma/build/index.js'),
-      // Relative to src/services/ (3 levels to workspace root)
-      path.resolve(__dirname, '../../../packages/database/node_modules/prisma/build/index.js'),
-      // Relative to staged packaging directory
+      // Relative to compiled dist/services/ in staged packaging or packaged app
+      // (__dirname: <app>/desktop/dist/services -> 3 levels up is <app>)
+      path.resolve(__dirname, '../../../node_modules/prisma/build/index.js'),
       path.resolve(__dirname, '../../../../.packaging/node_modules/prisma/build/index.js'),
+      // Relative to compiled dist/services/ in monorepo development (4 levels to workspace root)
+      path.resolve(__dirname, '../../../../packages/database/node_modules/prisma/build/index.js'),
+      // Relative to src/services/ in development (3 levels to workspace root)
+      path.resolve(__dirname, '../../../packages/database/node_modules/prisma/build/index.js'),
       // Packaged app resources
       ...(process.resourcesPath
         ? [
+            path.resolve(process.resourcesPath, 'app/node_modules/prisma/build/index.js'),
             path.resolve(process.resourcesPath, 'prisma/build/index.js'),
             path.resolve(process.resourcesPath, 'node_modules/prisma/build/index.js'),
             path.resolve(
@@ -203,9 +206,9 @@ export function resolvePrismaAssets(
           ]
         : []),
       // Relative to process.cwd() (when run from root or apps/desktop)
+      path.resolve(process.cwd(), 'node_modules/prisma/build/index.js'),
       path.resolve(process.cwd(), 'packages/database/node_modules/prisma/build/index.js'),
       path.resolve(process.cwd(), '../../packages/database/node_modules/prisma/build/index.js'),
-      path.resolve(process.cwd(), 'node_modules/prisma/build/index.js'),
       path.resolve(__dirname, '../../../../node_modules/prisma/build/index.js'),
     ];
 
