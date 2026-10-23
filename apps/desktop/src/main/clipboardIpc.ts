@@ -7,16 +7,28 @@
  */
 
 import { ipcMain, type IpcMainInvokeEvent } from 'electron';
-import { IPC_CHANNELS, type ClipboardStatusDto, type CapturedClipDto } from '@cliporbit/contracts';
+import {
+  IPC_CHANNELS,
+  type ClipboardStatusDto,
+  type CapturedClipDto,
+  type PersistedClipDto,
+  type PersistedClipsResult,
+  type ClearHistoryResult,
+} from '@cliporbit/contracts';
 import {
   getClipboardCaptureService,
   type ClipboardCaptureService,
   type ClipboardCaptureStatus,
   type CapturedTextItem,
+  getEncryptedClipboardPersistenceService,
+  type EncryptedClipboardPersistenceService,
+  type DecryptedClipRecord,
+  classifyText,
 } from '../services/clipboard';
 
 export interface ClipboardIpcOptions {
   captureService?: ClipboardCaptureService;
+  persistenceService?: EncryptedClipboardPersistenceService;
   isAuthorized?: (event: IpcMainInvokeEvent) => boolean;
   isShutdown?: () => boolean;
 }
@@ -55,11 +67,32 @@ export function serializeCapturedClips(items: CapturedTextItem[]): CapturedClipD
 }
 
 /**
+ * Serializes internal decrypted persisted records into safe DTOs for renderer transport.
+ * Strictly omits database entities, raw ciphertext, nonces, authentication tags, and encryption keys.
+ */
+export function serializePersistedClips(clips: DecryptedClipRecord[]): PersistedClipDto[] {
+  return clips.map((clip) => ({
+    id: String(clip.id),
+    text: String(clip.text),
+    createdAt:
+      clip.createdAt instanceof Date
+        ? clip.createdAt.toISOString()
+        : new Date(clip.createdAt).toISOString(),
+    byteLength: Number(clip.byteLength),
+    category: classifyText(clip.text),
+    isPinned: Boolean(clip.isPinned),
+    sourceApp: clip.sourceApp ?? null,
+  }));
+}
+
+/**
  * Creates pure handler functions for clipboard IPC operations.
  * Allows deterministic unit testing with mock events and fake services.
  */
 export function createClipboardIpcHandlers(options?: ClipboardIpcOptions) {
   const getService = () => options?.captureService ?? getClipboardCaptureService();
+  const getPersistence = () =>
+    options?.persistenceService ?? getEncryptedClipboardPersistenceService();
 
   function validateRequest(event: IpcMainInvokeEvent): void {
     if (options?.isShutdown && options.isShutdown()) {
@@ -115,6 +148,134 @@ export function createClipboardIpcHandlers(options?: ClipboardIpcOptions) {
       const service = getService();
       return serializeCapturedClips(service.getRecentItems());
     },
+
+    handleGetPersistedClips: async (
+      event: IpcMainInvokeEvent,
+      limit?: unknown,
+    ): Promise<PersistedClipsResult> => {
+      validateRequest(event);
+
+      let validatedLimit = 50;
+      if (limit !== undefined && limit !== null) {
+        if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+          throw new Error('Limit must be an integer between 1 and 100.');
+        }
+        validatedLimit = limit;
+      }
+
+      const persistence = getPersistence();
+      if (!persistence) {
+        return {
+          success: false,
+          error: 'Encrypted persistence service is unavailable.',
+        };
+      }
+
+      try {
+        const result = await persistence.getRecentClips({ limit: validatedLimit });
+        return {
+          success: true,
+          clips: serializePersistedClips(result.clips),
+        };
+      } catch {
+        console.error('[ClipOrbit Main] Failed to query persisted clips from database.');
+        return {
+          success: false,
+          error: 'Failed to retrieve saved clipboard history from local storage.',
+        };
+      }
+    },
+
+    handlePinClip: async (
+      event: IpcMainInvokeEvent,
+      id: unknown,
+      isPinned: unknown,
+    ): Promise<boolean> => {
+      validateRequest(event);
+
+      if (typeof id !== 'string' || id.trim().length === 0) {
+        throw new Error('ID must be a non-empty string.');
+      }
+      if (typeof isPinned !== 'boolean') {
+        throw new Error('isPinned must be a boolean.');
+      }
+
+      const persistence = getPersistence();
+      if (!persistence) {
+        return false;
+      }
+
+      try {
+        if (isPinned) {
+          return await persistence.pinClip(id.trim());
+        } else {
+          return await persistence.unpinClip(id.trim());
+        }
+      } catch (error) {
+        throw new Error(error instanceof Error ? error.message : 'Database pin operation failed.');
+      }
+    },
+
+    handleDeleteClip: async (event: IpcMainInvokeEvent, id: unknown): Promise<boolean> => {
+      validateRequest(event);
+
+      if (typeof id !== 'string' || id.trim().length === 0) {
+        throw new Error('ID must be a non-empty string.');
+      }
+
+      const cleanId = id.trim();
+
+      // Remove from database first if persistence service is available
+      const persistence = getPersistence();
+      let removedFromDb = false;
+      if (persistence) {
+        try {
+          removedFromDb = await persistence.deleteClip(cleanId);
+        } catch (error) {
+          throw new Error(
+            error instanceof Error ? error.message : 'Database delete operation failed.',
+          );
+        }
+      }
+
+      // Remove from active in-memory session if present
+      const service = getService();
+      const removedFromMemory = service.removeItem(cleanId);
+
+      return removedFromMemory || removedFromDb;
+    },
+
+    handleClearHistory: async (event: IpcMainInvokeEvent): Promise<ClearHistoryResult> => {
+      validateRequest(event);
+
+      const persistence = getPersistence();
+      if (!persistence) {
+        return {
+          success: false,
+          error: 'Local database storage is unavailable; cannot clear persisted history.',
+        };
+      }
+
+      let clearedCount = 0;
+      try {
+        clearedCount = await persistence.clearAllClips();
+      } catch {
+        console.error('[ClipOrbit Main] Failed to clear persisted clips from database.');
+        return {
+          success: false,
+          error: 'Failed to clear saved clipboard history from local storage.',
+        };
+      }
+
+      // Clear in-memory session history
+      const service = getService();
+      service.clearHistory();
+
+      return {
+        success: true,
+        clearedCount,
+      };
+    },
   };
 }
 
@@ -130,6 +291,16 @@ export function registerClipboardIpcHandlers(options?: ClipboardIpcOptions): voi
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_STOP, handlers.handleStopCapture);
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_GET_STATUS, handlers.handleGetCaptureStatus);
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_GET_RECENT, handlers.handleGetRecentClips);
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_GET_PERSISTED, (event, limit) =>
+    handlers.handleGetPersistedClips(event, limit),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_PIN, (event, id, isPinned) =>
+    handlers.handlePinClip(event, id, isPinned),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_DELETE, (event, id) =>
+    handlers.handleDeleteClip(event, id),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_CLEAR, handlers.handleClearHistory);
 
   console.log('[ClipOrbit Main] Registered secure clipboard IPC handlers.');
 }

@@ -53,10 +53,15 @@ export function createSettingsIpcHandlers(options?: SettingsIpcOptions) {
       enabled: unknown,
     ): Promise<boolean> => {
       validateRequest(event);
+      const policy = getPolicy();
       if (typeof enabled !== 'boolean') {
+        try {
+          await policy.setPersistenceEnabled(enabled as boolean);
+        } catch {
+          // Trigger in-memory fail-closed override on invalid mutation attempt
+        }
         throw new Error('Invalid input: persistence preference must be a boolean.');
       }
-      const policy = getPolicy();
       return await policy.setPersistenceEnabled(enabled);
     },
   };

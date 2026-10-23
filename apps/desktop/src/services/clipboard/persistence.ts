@@ -111,6 +111,7 @@ export interface IClipRepository {
   unpin(id: string): Promise<Clip | null>;
   delete(id: string): Promise<boolean>;
   deleteExpired(referenceDate?: Date): Promise<number>;
+  deleteAll?(options?: { unpinnedOnly?: boolean }): Promise<number>;
 }
 
 export interface IEncryptionService {
@@ -179,6 +180,8 @@ export class EncryptedClipboardPersistenceService {
   private readonly encryptionService: IEncryptionService;
   private readonly sensitiveDetector: SensitiveDetectorFn;
   private readonly policy: IPersistencePolicy | PersistencePolicyFn;
+  private lastExpiryCleanupTime = 0;
+  private static readonly EXPIRY_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
   constructor(options: EncryptedClipboardPersistenceOptions) {
     if (!options || typeof options !== 'object') {
@@ -375,6 +378,9 @@ export class EncryptedClipboardPersistenceService {
       throw new PersistenceValidationError('Offset must be a non-negative integer.');
     }
 
+    // Opportunistically purge expired clips in background (throttled to at most once per hour)
+    void this.maybePurgeExpiredClips();
+
     let records: Clip[];
     try {
       records = await this.repository.findRecent({
@@ -570,6 +576,47 @@ export class EncryptedClipboardPersistenceService {
     } catch (error) {
       throw new PersistenceDatabaseError(
         error instanceof Error ? error.message : 'Database deleteExpired operation failed.',
+      );
+    }
+  }
+
+  /**
+   * Opportunistically purges expired clips in the background if the cleanup interval has passed.
+   * Keeps storage bounded without running expensive full-table deletes on every polling check.
+   */
+  public async maybePurgeExpiredClips(referenceDate?: Date): Promise<number | null> {
+    const now = Date.now();
+    if (
+      now - this.lastExpiryCleanupTime <
+      EncryptedClipboardPersistenceService.EXPIRY_CLEANUP_INTERVAL_MS
+    ) {
+      return null;
+    }
+    this.lastExpiryCleanupTime = now;
+    try {
+      return await this.deleteExpiredClips(referenceDate);
+    } catch {
+      // Opportunistic cleanup errors are contained safely without disrupting callers
+      return null;
+    }
+  }
+
+  /**
+   * Clears persisted clips from the database.
+   *
+   * Bypasses consent check because user explicitly requested deletion/clearing of their data.
+   * Only deletes records from the Clip table; snippets and settings are never touched.
+   * Returns count of deleted records.
+   */
+  public async clearAllClips(options?: { unpinnedOnly?: boolean }): Promise<number> {
+    try {
+      if (typeof this.repository.deleteAll === 'function') {
+        return await this.repository.deleteAll(options);
+      }
+      return 0;
+    } catch (error) {
+      throw new PersistenceDatabaseError(
+        error instanceof Error ? error.message : 'Database deleteAll operation failed.',
       );
     }
   }

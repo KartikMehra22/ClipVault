@@ -216,6 +216,20 @@ export class ClipboardCaptureService {
   }
 
   /**
+   * Removes a captured text item from in-memory history by ID.
+   * Updates total byte length accordingly. Returns true if removed, false if not found.
+   */
+  public removeItem(id: string): boolean {
+    const index = this.history.findIndex((item) => item.id === id);
+    if (index !== -1) {
+      const removed = this.history.splice(index, 1)[0];
+      this.totalByteLength = Math.max(0, this.totalByteLength - removed.byteLength);
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Returns current diagnostic status. Does not expose clipboard contents or keys.
    */
   public getStatus(): ClipboardCaptureStatus {

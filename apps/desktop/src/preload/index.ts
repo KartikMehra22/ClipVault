@@ -4,6 +4,8 @@ import type {
   DesktopInfo,
   ClipboardStatusDto,
   CapturedClipDto,
+  PersistedClipsResult,
+  ClearHistoryResult,
 } from '@cliporbit/contracts';
 
 // In sandboxed preload, keep imports type-only to avoid runtime node_modules resolution
@@ -15,6 +17,10 @@ const CHANNELS = {
   STOP_CAPTURE: 'clipboard:stop',
   GET_STATUS: 'clipboard:get-status',
   GET_RECENT: 'clipboard:get-recent',
+  GET_PERSISTED: 'clipboard:get-persisted',
+  PIN_CLIP: 'clipboard:pin',
+  DELETE_CLIP: 'clipboard:delete',
+  CLEAR_HISTORY: 'clipboard:clear',
   GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
 } as const;
@@ -80,6 +86,48 @@ const desktopBridge: DesktopBridge = {
     } catch (err) {
       console.error('[ClipOrbit Preload] Failed to retrieve recent clips:', err);
       throw err;
+    }
+  },
+
+  getPersistedClips: async (limit?: number): Promise<PersistedClipsResult> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.GET_PERSISTED, limit)) as PersistedClipsResult;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to retrieve persisted clips:', err);
+      return {
+        success: false,
+        error: 'Failed to retrieve saved clipboard history from local storage.',
+      };
+    }
+  },
+
+  pinClip: async (id: string, isPinned: boolean): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.PIN_CLIP, id, isPinned)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to update clip pin status:', err);
+      throw err;
+    }
+  },
+
+  deleteClip: async (id: string): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.DELETE_CLIP, id)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to delete clip:', err);
+      throw err;
+    }
+  },
+
+  clearHistory: async (): Promise<ClearHistoryResult> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.CLEAR_HISTORY)) as ClearHistoryResult;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to clear clipboard history:', err);
+      return {
+        success: false,
+        error: 'Failed to clear saved clipboard history from local storage.',
+      };
     }
   },
 
