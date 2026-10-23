@@ -41,6 +41,8 @@ export interface LifecycleCoordinatorDependencies {
   disposeEncryption: () => void;
   /** Disposes the clipboard capture service, stopping polling and purging in-memory entries. */
   disposeClipboard?: () => void;
+  /** Disposes any running embedded HTTP server. */
+  disposeServer?: () => Promise<void> | void;
   /** Creates the main application BrowserWindow. */
   createWindow: () => unknown;
   /** Displays a native error dialog box. */
@@ -278,6 +280,16 @@ export class LifecycleCoordinator {
       this.dependencies.logError?.('[ClipOrbit Lifecycle] Error disconnecting database:', err);
     }
 
+    // 4. Dispose running embedded server if present
+    if (this.dependencies.disposeServer) {
+      try {
+        await this.dependencies.disposeServer();
+        this.dependencies.log?.('[ClipOrbit Lifecycle] Static server closed cleanly.');
+      } catch (err) {
+        this.dependencies.logError?.('[ClipOrbit Lifecycle] Error closing static server:', err);
+      }
+    }
+
     this.shutdownCompleted = true;
     this.dependencies.log?.('[ClipOrbit Lifecycle] Shutdown cleanup complete.');
   }
@@ -286,6 +298,14 @@ export class LifecycleCoordinator {
    * Internal helper to clean up resources during startup failure.
    */
   private async cleanupResources(): Promise<void> {
+    if (this.dependencies.disposeServer) {
+      try {
+        await this.dependencies.disposeServer();
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+
     if (this.dependencies.disposeClipboard) {
       try {
         this.dependencies.disposeClipboard();

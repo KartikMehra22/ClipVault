@@ -222,8 +222,8 @@ export function createSnippetIpcHandlers(options?: SnippetIpcOptions) {
       try {
         const service = getService();
         return await service.deleteSnippet(id.trim());
-      } catch (err) {
-        console.error('[ClipOrbit Main] Failed to delete snippet from local storage:', err);
+      } catch {
+        console.error('[ClipOrbit Main] Failed to delete snippet from local storage.');
         return false;
       }
     },

@@ -9,25 +9,42 @@ import { LifecycleCoordinator, type AppReadinessStatus } from './lifecycle';
 import { registerClipboardIpcHandlers } from './clipboardIpc';
 import { registerSettingsIpcHandlers } from './settingsIpc';
 import { registerSnippetIpcHandlers } from './snippetIpc';
+import { resolveRendererOutDir, startRendererServer, type StaticServer } from './staticServer';
 
 let mainWindow: BrowserWindow | null = null;
+let staticRendererServer: StaticServer | null = null;
+let activeRendererUrl = 'http://127.0.0.1:3000';
+let allowedRendererOrigin = 'http://127.0.0.1:3000';
+let ipcRegistered = false;
 
 const isDev = !app.isPackaged;
-const RENDERER_URL = process.env.RENDERER_URL || 'http://127.0.0.1:3000';
-const ALLOWED_RENDERER_ORIGIN = 'http://127.0.0.1:3000';
 
 app.name = 'ClipOrbit';
+
+/**
+ * Returns the currently authorized renderer origin for frame validation.
+ */
+export function getAllowedRendererOrigin(): string {
+  return allowedRendererOrigin;
+}
+
+/**
+ * Updates the authorized renderer origin (useful for testing or dynamic ports).
+ */
+export function setAllowedRendererOrigin(origin: string): void {
+  allowedRendererOrigin = origin;
+}
 
 /**
  * Validates that an incoming IPC invocation originates strictly from the authorized renderer.
  */
 function isAuthorizedSender(event: IpcMainInvokeEvent): boolean {
-  return isAuthorizedFrame(event.senderFrame, ALLOWED_RENDERER_ORIGIN);
+  return isAuthorizedFrame(event.senderFrame, allowedRendererOrigin);
 }
 
 /**
  * Handler for desktop information request.
- * Strictly returns the application name, version and operating system platform.
+ * Strictly returns the application name, version, and operating system platform.
  */
 function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
   if (!isAuthorizedSender(event)) {
@@ -54,8 +71,14 @@ function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
 
 /**
  * Registers all secure IPC handlers prior to window creation.
+ * Idempotent: safe against duplicate invocation.
  */
 function registerIpcHandlers(): void {
+  if (ipcRegistered) {
+    return;
+  }
+  ipcRegistered = true;
+
   ipcMain.handle(IPC_CHANNELS.APP_GET_DESKTOP_INFO, handleGetDesktopInfo);
   registerClipboardIpcHandlers({
     isAuthorized: isAuthorizedSender,
@@ -73,6 +96,84 @@ function registerIpcHandlers(): void {
       lifecycleCoordinator.isShutdownInProgress() || lifecycleCoordinator.isShutdownCompleted(),
   });
   console.log('[ClipOrbit Main] Registered secure IPC handlers.');
+}
+
+/**
+ * Resolves the appropriate renderer target URL and origin.
+ * In production or packaged mode, serves static export assets on loopback.
+ * In development, uses the Next.js dev server at http://127.0.0.1:3000.
+ */
+async function resolveRendererTarget(): Promise<{ url: string; origin: string }> {
+  if (process.env.RENDERER_URL) {
+    const rawUrl = process.env.RENDERER_URL.trim();
+    try {
+      const parsed = new URL(rawUrl);
+      return { url: rawUrl, origin: parsed.origin };
+    } catch {
+      return { url: rawUrl, origin: 'http://127.0.0.1:3000' };
+    }
+  }
+
+  const outDir = resolveRendererOutDir();
+  if (app.isPackaged || process.env.NODE_ENV === 'production' || outDir) {
+    if (outDir) {
+      console.log(`[ClipOrbit Main] Serving packaged renderer assets from: ${outDir}`);
+      staticRendererServer = await startRendererServer(outDir);
+      console.log(
+        `[ClipOrbit Main] Internal renderer server running at: ${staticRendererServer.url}`,
+      );
+      return { url: staticRendererServer.url, origin: staticRendererServer.origin };
+    }
+  }
+
+  return { url: 'http://127.0.0.1:3000', origin: 'http://127.0.0.1:3000' };
+}
+
+/**
+ * Loads the renderer URL into the BrowserWindow with retry logic,
+ * allowing the application to wait for the development server to finish starting.
+ */
+async function loadRendererWithRetry(
+  window: BrowserWindow,
+  targetUrl: string,
+  maxAttempts = 30,
+  intervalMs = 500,
+): Promise<void> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (window.isDestroyed()) {
+      return;
+    }
+
+    try {
+      if (attempt > 1) {
+        console.log(
+          `[ClipOrbit Main] Waiting for renderer at ${targetUrl} (attempt ${attempt}/${maxAttempts})...`,
+        );
+      }
+      await window.loadURL(targetUrl);
+      console.log(`[ClipOrbit Main] Successfully loaded renderer from ${targetUrl}.`);
+      return;
+    } catch (err) {
+      if (window.isDestroyed()) {
+        return;
+      }
+
+      if (attempt === maxAttempts) {
+        console.error(
+          `[ClipOrbit Main] Fatal: Timed out waiting for renderer at ${targetUrl} after ${maxAttempts} attempts.`,
+          err,
+        );
+        dialog.showErrorBox(
+          'ClipOrbit — Renderer Connection Failed',
+          `Could not connect to the renderer at ${targetUrl}.\n\n` +
+            `Ensure the Next.js development server is running ("pnpm dev") or compile production assets ("pnpm build").`,
+        );
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
 }
 
 function createWindow(): BrowserWindow {
@@ -101,9 +202,25 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  mainWindow.webContents.on('console-message', (_event, level, message) => {
-    console.log(`[ClipOrbit WebContents Log] [Level ${level}]: ${message}`);
-  });
+  if (isDev) {
+    mainWindow.webContents.on('console-message', (event, ...legacyArgs) => {
+      const message =
+        typeof event === 'object' && event !== null && 'message' in event
+          ? String((event as unknown as { message: unknown }).message)
+          : typeof legacyArgs[1] === 'string'
+            ? legacyArgs[1]
+            : '';
+      const level =
+        typeof event === 'object' && event !== null && 'level' in event
+          ? String((event as unknown as { level: unknown }).level)
+          : String(legacyArgs[0] ?? 0);
+      // Redact potential 64-char hex key strings before logging
+      const sanitized = message.replace(/\b[0-9a-fA-F]{64}\b/g, '[REDACTED_KEY]');
+      if (sanitized.trim()) {
+        console.log(`[ClipOrbit WebContents Log] [Level ${level}]: ${sanitized}`);
+      }
+    });
+  }
 
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[ClipOrbit Main] Renderer page finished loading successfully.');
@@ -111,17 +228,16 @@ function createWindow(): BrowserWindow {
 
   mainWindow.once('ready-to-show', () => {
     console.log('[ClipOrbit Main] Window ready-to-show event triggered; showing window.');
-    mainWindow?.show();
+    if (process.env.CLIPORBIT_SMOKE_TEST !== '1') {
+      mainWindow?.show();
+    }
   });
 
-  mainWindow.loadURL(RENDERER_URL).catch((err: unknown) => {
-    console.error(
-      `[ClipOrbit Main] Error: Failed to connect to renderer server at ${RENDERER_URL}. Ensure Next.js is running.`,
-      err,
-    );
+  loadRendererWithRetry(mainWindow, activeRendererUrl).catch((err: unknown) => {
+    console.error(`[ClipOrbit Main] Unexpected error while loading renderer URL:`, err);
   });
 
-  if (isDev) {
+  if (isDev && process.env.CLIPORBIT_SMOKE_TEST !== '1') {
     console.log('[ClipOrbit Main] Development mode active: opening DevTools.');
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
@@ -136,7 +252,7 @@ function createWindow(): BrowserWindow {
 
 /**
  * Global lifecycle coordinator configured with runtime database, encryption,
- * and Electron window dependencies.
+ * static server, and Electron window dependencies.
  */
 const lifecycleCoordinator = new LifecycleCoordinator({
   initializeDatabase: async () => {
@@ -164,6 +280,12 @@ const lifecycleCoordinator = new LifecycleCoordinator({
   },
   disposeClipboard: () => {
     disposeClipboardCaptureService();
+  },
+  disposeServer: async () => {
+    if (staticRendererServer) {
+      await staticRendererServer.close();
+      staticRendererServer = null;
+    }
   },
   createWindow: () => createWindow(),
   showErrorBox: (title, content) => dialog.showErrorBox(title, content),
@@ -196,12 +318,33 @@ if (!gotSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     console.log('[ClipOrbit Main] Electron app ready event received.');
+
+    // Determine target renderer URL and origin
+    try {
+      const target = await resolveRendererTarget();
+      activeRendererUrl = target.url;
+      allowedRendererOrigin = target.origin;
+    } catch (targetErr) {
+      console.error('[ClipOrbit Main] Failed to resolve renderer target:', targetErr);
+    }
+
     registerIpcHandlers();
 
     // Execute orderly startup: DB -> Encryption -> Window
     const startupSuccess = await lifecycleCoordinator.startup();
     if (!startupSuccess) {
       console.warn('[ClipOrbit Main] Startup sequence aborted due to initialization failure.');
+      return;
+    }
+
+    // Automated smoke test verification hook
+    if (process.env.CLIPORBIT_SMOKE_TEST === '1') {
+      console.log(
+        '[ClipOrbit Main] Smoke test startup verified successfully. Initiating clean exit...',
+      );
+      setTimeout(() => {
+        app.quit();
+      }, 500);
       return;
     }
 
@@ -249,4 +392,11 @@ if (!gotSingleInstanceLock) {
   });
 }
 
-export { isAuthorizedSender, handleGetDesktopInfo, lifecycleCoordinator, getReadinessStatus };
+export {
+  isAuthorizedSender,
+  handleGetDesktopInfo,
+  lifecycleCoordinator,
+  getReadinessStatus,
+  registerIpcHandlers,
+  createWindow,
+};

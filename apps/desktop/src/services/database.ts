@@ -146,6 +146,16 @@ export function resolvePrismaAssets(
       path.resolve(__dirname, '../../../../packages/database/prisma/schema.prisma'),
       // Relative to src/services/ (3 levels to workspace root)
       path.resolve(__dirname, '../../../packages/database/prisma/schema.prisma'),
+      // Relative to staged packaging directory
+      path.resolve(__dirname, '../../../../.packaging/prisma/schema.prisma'),
+      // Packaged app resources
+      ...(process.resourcesPath
+        ? [
+            path.resolve(process.resourcesPath, 'prisma/schema.prisma'),
+            path.resolve(process.resourcesPath, 'app/prisma/schema.prisma'),
+            path.resolve(process.resourcesPath, 'packages/database/prisma/schema.prisma'),
+          ]
+        : []),
       // Relative to process.cwd() (when run from root or apps/desktop)
       path.resolve(process.cwd(), 'packages/database/prisma/schema.prisma'),
       path.resolve(process.cwd(), '../../packages/database/prisma/schema.prisma'),
@@ -162,8 +172,7 @@ export function resolvePrismaAssets(
   if (!schemaPath || !fs.existsSync(schemaPath)) {
     throw new DatabaseMigrationError(
       `Prisma schema not found. Searched candidate paths for "packages/database/prisma/schema.prisma". ` +
-        `Note: In packaged production builds, Prisma schema and migration assets must be bundled into app resources. ` +
-        `Packaged production migrations are not yet configured for this build.`,
+        `Note: In packaged production builds, Prisma schema and migration assets must be bundled into app resources.`,
     );
   }
 
@@ -180,6 +189,19 @@ export function resolvePrismaAssets(
       path.resolve(__dirname, '../../../../packages/database/node_modules/prisma/build/index.js'),
       // Relative to src/services/ (3 levels to workspace root)
       path.resolve(__dirname, '../../../packages/database/node_modules/prisma/build/index.js'),
+      // Relative to staged packaging directory
+      path.resolve(__dirname, '../../../../.packaging/node_modules/prisma/build/index.js'),
+      // Packaged app resources
+      ...(process.resourcesPath
+        ? [
+            path.resolve(process.resourcesPath, 'prisma/build/index.js'),
+            path.resolve(process.resourcesPath, 'node_modules/prisma/build/index.js'),
+            path.resolve(
+              process.resourcesPath,
+              'packages/database/node_modules/prisma/build/index.js',
+            ),
+          ]
+        : []),
       // Relative to process.cwd() (when run from root or apps/desktop)
       path.resolve(process.cwd(), 'packages/database/node_modules/prisma/build/index.js'),
       path.resolve(process.cwd(), '../../packages/database/node_modules/prisma/build/index.js'),
