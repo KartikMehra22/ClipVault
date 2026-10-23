@@ -8,6 +8,7 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
+    "dev": "node scripts/ensure-ports.mjs && pnpm -r --parallel dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
