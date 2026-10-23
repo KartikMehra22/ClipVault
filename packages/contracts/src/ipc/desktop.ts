@@ -9,6 +9,12 @@ import type {
   PersistedClipsResult,
   ClearHistoryResult,
 } from './clipboard';
+import type {
+  CreateSnippetInputDto,
+  UpdateSnippetInputDto,
+  SnippetsResult,
+  SnippetMutationResult,
+} from './snippets';
 
 export interface DesktopInfo {
   appName: string;
@@ -28,8 +34,13 @@ export interface DesktopBridge {
   pinClip(id: string, isPinned: boolean): Promise<boolean>;
   deleteClip(id: string): Promise<boolean>;
   clearHistory(): Promise<ClearHistoryResult>;
+  writeClipboardText(text: string): Promise<boolean>;
   getClipboardPersistenceEnabled(): Promise<boolean>;
   setClipboardPersistenceEnabled(enabled: boolean): Promise<boolean>;
+  getSnippets(options?: { language?: string }): Promise<SnippetsResult>;
+  createSnippet(input: CreateSnippetInputDto): Promise<SnippetMutationResult>;
+  updateSnippet(input: UpdateSnippetInputDto): Promise<SnippetMutationResult>;
+  deleteSnippet(id: string): Promise<boolean>;
 }
 
 export const IPC_CHANNELS = {
@@ -44,8 +55,13 @@ export const IPC_CHANNELS = {
   CLIPBOARD_PIN: 'clipboard:pin',
   CLIPBOARD_DELETE: 'clipboard:delete',
   CLIPBOARD_CLEAR: 'clipboard:clear',
+  CLIPBOARD_WRITE_TEXT: 'clipboard:write-text',
   SETTINGS_GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SETTINGS_SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
+  SNIPPETS_LIST: 'snippets:list',
+  SNIPPETS_CREATE: 'snippets:create',
+  SNIPPETS_UPDATE: 'snippets:update',
+  SNIPPETS_DELETE: 'snippets:delete',
 } as const;
 
 export type { ClearHistoryResult };
