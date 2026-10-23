@@ -6,7 +6,7 @@
  * Protects against unauthorized frames, child frames, and post-shutdown invocation.
  */
 
-import { ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { ipcMain, clipboard, type IpcMainInvokeEvent } from 'electron';
 import {
   IPC_CHANNELS,
   type ClipboardStatusDto,
@@ -31,6 +31,7 @@ export interface ClipboardIpcOptions {
   persistenceService?: EncryptedClipboardPersistenceService;
   isAuthorized?: (event: IpcMainInvokeEvent) => boolean;
   isShutdown?: () => boolean;
+  clipboardWriter?: (text: string) => void;
 }
 
 /**
@@ -276,6 +277,26 @@ export function createClipboardIpcHandlers(options?: ClipboardIpcOptions) {
         clearedCount,
       };
     },
+
+    handleWriteClipboardText: (event: IpcMainInvokeEvent, text: unknown): boolean => {
+      validateRequest(event);
+
+      if (typeof text !== 'string') {
+        throw new Error('Clipboard text must be a string.');
+      }
+
+      if (options?.clipboardWriter) {
+        options.clipboardWriter(text);
+        return true;
+      }
+
+      if (clipboard && typeof clipboard.writeText === 'function') {
+        clipboard.writeText(text);
+        return true;
+      }
+
+      throw new Error('Clipboard writer is unavailable in this environment.');
+    },
   };
 }
 
@@ -301,6 +322,9 @@ export function registerClipboardIpcHandlers(options?: ClipboardIpcOptions): voi
     handlers.handleDeleteClip(event, id),
   );
   ipcMain.handle(IPC_CHANNELS.CLIPBOARD_CLEAR, handlers.handleClearHistory);
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_WRITE_TEXT, (event, text) =>
+    handlers.handleWriteClipboardText(event, text),
+  );
 
   console.log('[ClipOrbit Main] Registered secure clipboard IPC handlers.');
 }

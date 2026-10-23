@@ -8,6 +8,7 @@ import { disposeClipboardCaptureService } from '../services/clipboard';
 import { LifecycleCoordinator, type AppReadinessStatus } from './lifecycle';
 import { registerClipboardIpcHandlers } from './clipboardIpc';
 import { registerSettingsIpcHandlers } from './settingsIpc';
+import { registerSnippetIpcHandlers } from './snippetIpc';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -62,6 +63,11 @@ function registerIpcHandlers(): void {
       lifecycleCoordinator.isShutdownInProgress() || lifecycleCoordinator.isShutdownCompleted(),
   });
   registerSettingsIpcHandlers({
+    isAuthorized: isAuthorizedSender,
+    isShutdown: () =>
+      lifecycleCoordinator.isShutdownInProgress() || lifecycleCoordinator.isShutdownCompleted(),
+  });
+  registerSnippetIpcHandlers({
     isAuthorized: isAuthorizedSender,
     isShutdown: () =>
       lifecycleCoordinator.isShutdownInProgress() || lifecycleCoordinator.isShutdownCompleted(),

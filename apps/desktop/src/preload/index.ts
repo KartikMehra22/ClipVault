@@ -6,6 +6,10 @@ import type {
   CapturedClipDto,
   PersistedClipsResult,
   ClearHistoryResult,
+  SnippetsResult,
+  SnippetMutationResult,
+  CreateSnippetInputDto,
+  UpdateSnippetInputDto,
 } from '@cliporbit/contracts';
 
 // In sandboxed preload, keep imports type-only to avoid runtime node_modules resolution
@@ -21,8 +25,13 @@ const CHANNELS = {
   PIN_CLIP: 'clipboard:pin',
   DELETE_CLIP: 'clipboard:delete',
   CLEAR_HISTORY: 'clipboard:clear',
+  WRITE_CLIPBOARD_TEXT: 'clipboard:write-text',
   GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
+  SNIPPETS_LIST: 'snippets:list',
+  SNIPPETS_CREATE: 'snippets:create',
+  SNIPPETS_UPDATE: 'snippets:update',
+  SNIPPETS_DELETE: 'snippets:delete',
 } as const;
 
 const desktopBridge: DesktopBridge = {
@@ -131,6 +140,15 @@ const desktopBridge: DesktopBridge = {
     }
   },
 
+  writeClipboardText: async (text: string): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.WRITE_CLIPBOARD_TEXT, text)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to write text to clipboard:', err);
+      return false;
+    }
+  },
+
   getClipboardPersistenceEnabled: async (): Promise<boolean> => {
     try {
       return (await ipcRenderer.invoke(CHANNELS.GET_CLIPBOARD_PERSISTENCE)) as boolean;
@@ -146,6 +164,51 @@ const desktopBridge: DesktopBridge = {
     } catch (err) {
       console.error('[ClipOrbit Preload] Failed to update clipboard persistence setting:', err);
       throw err;
+    }
+  },
+
+  getSnippets: async (options?: { language?: string }): Promise<SnippetsResult> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SNIPPETS_LIST, options)) as SnippetsResult;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to retrieve snippets:', err);
+      return {
+        success: false,
+        error: 'Failed to retrieve snippets from local storage.',
+      };
+    }
+  },
+
+  createSnippet: async (input: CreateSnippetInputDto): Promise<SnippetMutationResult> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SNIPPETS_CREATE, input)) as SnippetMutationResult;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to create snippet:', err);
+      return {
+        success: false,
+        error: 'Failed to save snippet to local storage.',
+      };
+    }
+  },
+
+  updateSnippet: async (input: UpdateSnippetInputDto): Promise<SnippetMutationResult> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SNIPPETS_UPDATE, input)) as SnippetMutationResult;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to update snippet:', err);
+      return {
+        success: false,
+        error: 'Failed to update snippet in local storage.',
+      };
+    }
+  },
+
+  deleteSnippet: async (id: string): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.SNIPPETS_DELETE, id)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to delete snippet:', err);
+      return false;
     }
   },
 };
