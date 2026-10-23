@@ -63,6 +63,7 @@ export const SettingsView: FC = () => {
     } catch {
       // On error, fail closed and do not claim success
       setError('Failed to update persistence preference. Local history saving remains disabled.');
+      setPersistenceEnabled(false);
       if (typeof window !== 'undefined' && window.clipOrbit?.getClipboardPersistenceEnabled) {
         try {
           const fallback = await window.clipOrbit.getClipboardPersistenceEnabled();
@@ -70,8 +71,6 @@ export const SettingsView: FC = () => {
         } catch {
           setPersistenceEnabled(false);
         }
-      } else {
-        setPersistenceEnabled(false);
       }
     } finally {
       setIsSaving(false);

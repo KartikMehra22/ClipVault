@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import type { DesktopInfo, ClipboardStatusDto, CapturedClipDto } from '@cliporbit/contracts';
+import {
+  mergeHistoryClips,
+  type DesktopInfo,
+  type ClipboardStatusDto,
+  type CapturedClipDto,
+  type PersistedClipDto,
+  type MergedClipDto,
+  type PersistedClipsResult,
+} from '@cliporbit/contracts';
 import type {
   ClipboardItem,
   ClipboardContentType,
@@ -15,12 +23,30 @@ import { HistoryList } from '../features/history/HistoryList';
 import { CaptureControlBar } from '../features/history/CaptureControlBar';
 import { SnippetsView } from '../features/snippets/SnippetsView';
 import { SettingsView } from '../features/settings/SettingsView';
+import { ShieldIcon, TrashIcon } from '../components/common/Icons';
 
 /**
- * Maps a captured clip DTO to the internal renderer UI model.
- * Assigns sensible non-fabricated metadata and computes relative timestamps.
+ * Calculates a human-readable relative timestamp from an ISO 8601 string or Date.
  */
-function mapClipDtoToItem(dto: CapturedClipDto, isPinned: boolean): ClipboardItem {
+function formatCopiedAt(timestamp: string | Date): string {
+  const detected = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+  const now = new Date();
+  const diffSec = Math.max(0, Math.floor((now.getTime() - detected.getTime()) / 1000));
+  if (diffSec < 60) {
+    return 'Just now';
+  } else if (diffSec < 3600) {
+    return `${Math.floor(diffSec / 60)}m ago`;
+  } else if (diffSec < 86400) {
+    return `${Math.floor(diffSec / 3600)}h ago`;
+  }
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+/**
+ * Maps a merged clip DTO to the internal renderer UI model.
+ * Strictly avoids displaying raw ciphertext or cryptographic fields.
+ */
+export function mapMergedClipDtoToItem(dto: MergedClipDto): ClipboardItem {
   const type: ClipboardContentType = dto.category === 'url' ? 'link' : dto.category;
 
   let domain: string | undefined;
@@ -34,18 +60,7 @@ function mapClipDtoToItem(dto: CapturedClipDto, isPinned: boolean): ClipboardIte
 
   const charCount = dto.text.length;
   const wordCount = dto.text.trim().split(/\s+/).filter(Boolean).length;
-
-  const detected = new Date(dto.detectedAt);
-  const now = new Date();
-  const diffSec = Math.max(0, Math.floor((now.getTime() - detected.getTime()) / 1000));
-  let copiedAt = 'Just now';
-  if (diffSec >= 60 && diffSec < 3600) {
-    copiedAt = `${Math.floor(diffSec / 60)}m ago`;
-  } else if (diffSec >= 3600 && diffSec < 86400) {
-    copiedAt = `${Math.floor(diffSec / 3600)}h ago`;
-  } else if (diffSec >= 86400) {
-    copiedAt = `${Math.floor(diffSec / 86400)}d ago`;
-  }
+  const copiedAt = formatCopiedAt(dto.createdAt);
 
   let previewTitle: string | undefined;
   if (dto.category === 'url') {
@@ -62,9 +77,9 @@ function mapClipDtoToItem(dto: CapturedClipDto, isPinned: boolean): ClipboardIte
     type,
     content: dto.text,
     previewTitle,
-    sourceApp: 'System Clipboard',
+    sourceApp: dto.sourceApp || 'System Clipboard',
     copiedAt,
-    isPinned,
+    isPinned: dto.isPinned,
     metadata: {
       charCount,
       wordCount,
@@ -77,8 +92,12 @@ function mapClipDtoToItem(dto: CapturedClipDto, isPinned: boolean): ClipboardIte
 export default function HomePage() {
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const [, setPersistedIds] = useState<Set<string>>(new Set());
+  const [isConfirmingClear, setIsConfirmingClear] = useState<boolean>(false);
   const [captureStatus, setCaptureStatus] = useState<ClipboardStatusDto | null>(null);
   const [isLoadingAction, setIsLoadingAction] = useState<boolean>(false);
+  const [persistedLoadError, setPersistedLoadError] = useState<string | null>(null);
+  const [isPersistedStale, setIsPersistedStale] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<NavigationTab>('history');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -88,13 +107,98 @@ export default function HomePage() {
     'connecting',
   );
 
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
   const pinnedIdsRef = useRef(pinnedIds);
   pinnedIdsRef.current = pinnedIds;
+
+  const persistedIdsRef = useRef<Set<string>>(new Set());
 
   const captureStatusRef = useRef(captureStatus);
   captureStatusRef.current = captureStatus;
 
-  // 1. Connect to Electron IPC bridge and fetch initial status
+  const lastKnownPersistedClipsRef = useRef<PersistedClipDto[] | null>(null);
+  const requestIdRef = useRef<number>(0);
+
+  // Core loader: Fetches and merges live + persisted history with race condition prevention
+  const loadClips = useCallback(async (isMountedCheck?: () => boolean) => {
+    if (typeof window === 'undefined' || !window.clipOrbit) {
+      return;
+    }
+
+    const currentReqId = ++requestIdRef.current;
+
+    try {
+      const [liveClipsResult, persistedClipsResult] = await Promise.allSettled([
+        window.clipOrbit.getRecentClips
+          ? window.clipOrbit.getRecentClips()
+          : Promise.resolve([] as CapturedClipDto[]),
+        window.clipOrbit.getPersistedClips
+          ? window.clipOrbit.getPersistedClips(100)
+          : Promise.resolve({ success: true, clips: [] } as PersistedClipsResult),
+      ]);
+
+      if (isMountedCheck && !isMountedCheck()) return;
+      if (currentReqId !== requestIdRef.current) return;
+
+      const liveClips = liveClipsResult.status === 'fulfilled' ? liveClipsResult.value : [];
+
+      let persistedClips: PersistedClipDto[] = [];
+      let isSuccess = false;
+
+      if (persistedClipsResult.status === 'fulfilled') {
+        const res = persistedClipsResult.value;
+        if (res && typeof res === 'object' && 'success' in res) {
+          if (res.success) {
+            isSuccess = true;
+            persistedClips = res.clips;
+          } else {
+            isSuccess = false;
+          }
+        } else if (Array.isArray(res)) {
+          isSuccess = true;
+          persistedClips = res;
+        }
+      }
+
+      if (isSuccess) {
+        lastKnownPersistedClipsRef.current = persistedClips;
+        setPersistedLoadError(null);
+        setIsPersistedStale(false);
+      } else {
+        // Failed to retrieve persisted history
+        if (lastKnownPersistedClipsRef.current !== null) {
+          // Retain last known persisted clips as stale data
+          persistedClips = lastKnownPersistedClipsRef.current;
+          setIsPersistedStale(true);
+          setPersistedLoadError(
+            'Unable to refresh saved history. Showing previously loaded clips.',
+          );
+        } else {
+          // Initial retrieval failure: do not treat as successful empty history
+          persistedClips = [];
+          setIsPersistedStale(false);
+          setPersistedLoadError('Saved history could not be loaded from local storage.');
+        }
+      }
+
+      const {
+        clips: mergedClips,
+        persistedIds: nextPersistedIds,
+        allPinnedIds: nextPinnedIds,
+      } = mergeHistoryClips(liveClips, persistedClips, pinnedIdsRef.current, 100);
+
+      setItems(mergedClips.map(mapMergedClipDtoToItem));
+      setPersistedIds(nextPersistedIds);
+      persistedIdsRef.current = nextPersistedIds;
+      setPinnedIds(nextPinnedIds);
+    } catch (err) {
+      console.error('[ClipOrbit Renderer] Failed to load clipboard history:', err);
+    }
+  }, []);
+
+  // 1. Connect to Electron IPC bridge, fetch initial status, and load saved history
   useEffect(() => {
     let isMounted = true;
 
@@ -114,16 +218,10 @@ export default function HomePage() {
           setDesktopInfo(info);
           setCaptureStatus(initialStatus);
           setBridgeStatus('connected');
-
-          if (initialStatus.isRunning && initialStatus.itemCount > 0) {
-            const initialClips = await window.clipOrbit.getRecentClips();
-            if (isMounted) {
-              setItems(
-                initialClips.map((c) => mapClipDtoToItem(c, pinnedIdsRef.current.has(c.id))),
-              );
-            }
-          }
         }
+
+        // Load saved history regardless of whether capture is running
+        await loadClips(() => isMounted);
       } catch {
         if (isMounted) {
           setBridgeStatus('error');
@@ -136,7 +234,7 @@ export default function HomePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadClips]);
 
   // 2. Synchronize history efficiently while capture is active
   useEffect(() => {
@@ -153,7 +251,6 @@ export default function HomePage() {
         const latestStatus = await window.clipOrbit.getCaptureStatus();
         const current = captureStatusRef.current;
 
-        // Check if history counts, skipped sensitive items, skipped oversized items, timestamps, or state changed
         const hasChanged =
           !current ||
           latestStatus.itemCount !== current.itemCount ||
@@ -170,8 +267,7 @@ export default function HomePage() {
             latestStatus.itemCount !== current.itemCount ||
             latestStatus.lastDetectedAt !== current.lastDetectedAt
           ) {
-            const clips = await window.clipOrbit.getRecentClips();
-            setItems(clips.map((c) => mapClipDtoToItem(c, pinnedIdsRef.current.has(c.id))));
+            await loadClips();
           }
         }
       } catch {
@@ -182,7 +278,7 @@ export default function HomePage() {
     return () => {
       clearInterval(interval);
     };
-  }, [captureStatus?.isRunning, captureStatus?.isPaused]);
+  }, [captureStatus?.isRunning, captureStatus?.isPaused, loadClips]);
 
   // 3. Keyboard shortcut listener: Cmd/Ctrl+K to focus search input
   useEffect(() => {
@@ -198,21 +294,20 @@ export default function HomePage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 4. Capture Lifecycle Actions
+  // 4. Capture Lifecycle and History Actions
   const handleStartCapture = useCallback(async () => {
     if (!window.clipOrbit?.startCapture) return;
     setIsLoadingAction(true);
     try {
       const newStatus = await window.clipOrbit.startCapture();
       setCaptureStatus(newStatus);
-      const clips = await window.clipOrbit.getRecentClips();
-      setItems(clips.map((c) => mapClipDtoToItem(c, pinnedIdsRef.current.has(c.id))));
+      await loadClips();
     } catch (err) {
       console.error('[ClipOrbit Renderer] Failed to start capture:', err);
     } finally {
       setIsLoadingAction(false);
     }
-  }, []);
+  }, [loadClips]);
 
   const handlePauseCapture = useCallback(async () => {
     if (!window.clipOrbit?.pauseCapture) return;
@@ -246,33 +341,132 @@ export default function HomePage() {
     try {
       const newStatus = await window.clipOrbit.stopCapture();
       setCaptureStatus(newStatus);
-      setItems([]);
-      setPinnedIds(new Set());
+      await loadClips();
     } catch (err) {
       console.error('[ClipOrbit Renderer] Failed to stop capture:', err);
     } finally {
       setIsLoadingAction(false);
     }
-  }, []);
+  }, [loadClips]);
 
-  const handleTogglePin = useCallback((id: string) => {
+  const handleTogglePin = useCallback(async (id: string) => {
+    const isCurrentlyPinned = pinnedIdsRef.current.has(id);
+    const nextPinned = !isCurrentlyPinned;
+
+    // Optimistically update renderer state
     setPinnedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
+      if (nextPinned) {
         next.add(id);
+      } else {
+        next.delete(id);
       }
       return next;
     });
 
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, isPinned: !item.isPinned } : item)),
+      prev.map((item) => (item.id === id ? { ...item, isPinned: nextPinned } : item)),
     );
+
+    // Only invoke persistent pin through IPC if the clip actually exists in persistent storage
+    const isPersisted = persistedIdsRef.current.has(id);
+    if (isPersisted && window.clipOrbit?.pinClip) {
+      try {
+        const persisted = await window.clipOrbit.pinClip(id, nextPinned);
+        if (!persisted) {
+          throw new Error('Database pin operation returned false.');
+        }
+      } catch (err) {
+        console.error('[ClipOrbit Renderer] Failed to persist clip pin status:', err);
+        // Rollback optimistic update on database failure
+        setPinnedIds((prev) => {
+          const next = new Set(prev);
+          if (isCurrentlyPinned) {
+            next.add(id);
+          } else {
+            next.delete(id);
+          }
+          return next;
+        });
+        setItems((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, isPinned: isCurrentlyPinned } : item)),
+        );
+      }
+    }
+    // For in-memory unsaved clips, pin status remains preserved purely in active session memory
   }, []);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
+    const itemToDelete = itemsRef.current.find((item) => item.id === id);
+    const wasPinned = pinnedIdsRef.current.has(id);
+    const wasPersisted = persistedIdsRef.current.has(id);
+
+    // Optimistically remove from UI
     setItems((prev) => prev.filter((item) => item.id !== id));
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    persistedIdsRef.current.delete(id);
+    if (lastKnownPersistedClipsRef.current) {
+      lastKnownPersistedClipsRef.current = lastKnownPersistedClipsRef.current.filter(
+        (c) => c.id !== id,
+      );
+    }
+
+    if (window.clipOrbit?.deleteClip) {
+      try {
+        await window.clipOrbit.deleteClip(id);
+      } catch (err) {
+        console.error('[ClipOrbit Renderer] Failed to delete clip:', err);
+        // Rollback optimistic removal on deletion failure
+        if (itemToDelete) {
+          setItems((prev) => [itemToDelete, ...prev]);
+          if (wasPinned) {
+            setPinnedIds((prev) => new Set(prev).add(id));
+          }
+          if (wasPersisted) {
+            persistedIdsRef.current.add(id);
+          }
+        }
+      }
+    }
+  }, []);
+
+  const handleConfirmClearHistory = useCallback(async () => {
+    if (!window.clipOrbit?.clearHistory) {
+      setIsConfirmingClear(false);
+      return;
+    }
+
+    setIsLoadingAction(true);
+    try {
+      const result = await window.clipOrbit.clearHistory();
+      if (result.success) {
+        // Clear all history and pinned items from state
+        setItems([]);
+        setPinnedIds(new Set());
+        setPersistedIds(new Set());
+        persistedIdsRef.current = new Set();
+        pinnedIdsRef.current = new Set();
+        itemsRef.current = [];
+        lastKnownPersistedClipsRef.current = [];
+        setPersistedLoadError(null);
+        setIsPersistedStale(false);
+        setIsConfirmingClear(false);
+      } else {
+        // Do not clear local UI state or pretend history was cleared if DB deletion failed
+        setPersistedLoadError(result.error || 'Failed to clear saved clipboard history.');
+        setIsConfirmingClear(false);
+      }
+    } catch (err) {
+      console.error('[ClipOrbit Renderer] Failed to execute clear history:', err);
+      setPersistedLoadError('An unexpected error occurred while clearing clipboard history.');
+      setIsConfirmingClear(false);
+    } finally {
+      setIsLoadingAction(false);
+    }
   }, []);
 
   const handleClearSearch = useCallback(() => {
@@ -380,11 +574,28 @@ export default function HomePage() {
             <CaptureControlBar
               status={captureStatus}
               isLoading={isLoadingAction}
+              hasItems={items.length > 0}
               onStart={handleStartCapture}
               onPause={handlePauseCapture}
               onResume={handleResumeCapture}
               onStop={handleStopCapture}
+              onClearHistory={() => setIsConfirmingClear(true)}
             />
+          )}
+
+          {persistedLoadError && items.length > 0 && (
+            <div className="history-status-banner error" role="alert">
+              <div className="history-status-banner-content">
+                <ShieldIcon size={16} />
+                <span>
+                  {persistedLoadError}
+                  {isPersistedStale ? ' (stale)' : ''}
+                </span>
+              </div>
+              <button type="button" className="history-retry-btn" onClick={() => void loadClips()}>
+                Retry
+              </button>
+            </div>
           )}
 
           <CategoryFilter
@@ -399,6 +610,8 @@ export default function HomePage() {
             searchQuery={searchQuery}
             isPinnedOnly={activeTab === 'pinned'}
             isCaptureRunning={isCaptureRunning}
+            loadError={persistedLoadError}
+            onRetry={() => void loadClips()}
             onStartCapture={handleStartCapture}
             onTogglePin={handleTogglePin}
             onDelete={handleDelete}
@@ -410,6 +623,49 @@ export default function HomePage() {
       {activeTab === 'snippets' && <SnippetsView />}
 
       {activeTab === 'settings' && <SettingsView />}
+
+      {isConfirmingClear && (
+        <div
+          className="confirm-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-history-title"
+        >
+          <div className="confirm-modal-box">
+            <div className="confirm-modal-header">
+              <div className="confirm-modal-icon-danger">
+                <TrashIcon size={18} />
+              </div>
+              <h2 id="clear-history-title" className="confirm-modal-title">
+                Clear Clipboard History
+              </h2>
+            </div>
+            <p className="confirm-modal-body">
+              Are you sure you want to clear your clipboard history? This will permanently delete
+              all saved clips from local storage and remove all active session clips. Pinned clips
+              will also be removed. This action cannot be undone.
+            </p>
+            <div className="confirm-modal-actions">
+              <button
+                type="button"
+                className="confirm-modal-btn-cancel"
+                onClick={() => setIsConfirmingClear(false)}
+                disabled={isLoadingAction}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="confirm-modal-btn-danger"
+                onClick={() => void handleConfirmClearHistory()}
+                disabled={isLoadingAction}
+              >
+                {isLoadingAction ? 'Clearing...' : 'Clear All History'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

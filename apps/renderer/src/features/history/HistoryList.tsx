@@ -16,6 +16,8 @@ export interface HistoryListProps {
   searchQuery: string;
   isPinnedOnly?: boolean;
   isCaptureRunning?: boolean;
+  loadError?: string | null;
+  onRetry?: () => void;
   onStartCapture?: () => void;
   onTogglePin: (id: string) => void;
   onDelete: (id: string) => void;
@@ -28,6 +30,8 @@ export const HistoryList: FC<HistoryListProps> = ({
   searchQuery,
   isPinnedOnly = false,
   isCaptureRunning = false,
+  loadError,
+  onRetry,
   onStartCapture,
   onTogglePin,
   onDelete,
@@ -64,6 +68,24 @@ export const HistoryList: FC<HistoryListProps> = ({
           icon={<HistoryIcon size={28} />}
           title={`No ${activeFilter} clips found`}
           description={`There are currently no clipboard clips matching the "${activeFilter}" category in memory.`}
+        />
+      );
+    }
+
+    if (loadError) {
+      return (
+        <EmptyState
+          icon={<ShieldIcon size={28} />}
+          title="Saved history could not be loaded"
+          description={loadError}
+          action={
+            onRetry
+              ? {
+                  label: 'Retry Loading History',
+                  onClick: onRetry,
+                }
+              : undefined
+          }
         />
       );
     }

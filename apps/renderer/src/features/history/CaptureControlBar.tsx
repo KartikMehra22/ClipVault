@@ -1,14 +1,22 @@
 import type { FC } from 'react';
 import type { ClipboardStatusDto } from '@cliporbit/contracts';
-import { PlayIcon, PauseIcon, StopIcon, ShieldIcon } from '../../components/common/Icons';
+import {
+  PlayIcon,
+  PauseIcon,
+  StopIcon,
+  ShieldIcon,
+  TrashIcon,
+} from '../../components/common/Icons';
 
 export interface CaptureControlBarProps {
   status: ClipboardStatusDto | null;
   isLoading: boolean;
+  hasItems?: boolean;
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
+  onClearHistory?: () => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -20,10 +28,12 @@ function formatBytes(bytes: number): string {
 export const CaptureControlBar: FC<CaptureControlBarProps> = ({
   status,
   isLoading,
+  hasItems = false,
   onStart,
   onPause,
   onResume,
   onStop,
+  onClearHistory,
 }) => {
   const isRunning = Boolean(status?.isRunning);
   const isPaused = Boolean(status?.isPaused);
@@ -44,6 +54,20 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
         </div>
 
         <div className="capture-actions-group">
+          {hasItems && onClearHistory && (
+            <button
+              type="button"
+              onClick={onClearHistory}
+              disabled={isLoading}
+              className="capture-btn capture-btn-danger"
+              aria-label="Clear clipboard history"
+              title="Clear all saved and session history"
+            >
+              <TrashIcon size={12} />
+              <span>Clear History</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onStart}
@@ -109,13 +133,27 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
             type="button"
             onClick={onStop}
             disabled={isLoading}
-            className="capture-btn capture-btn-danger"
-            aria-label="Stop clipboard capture and clear session"
-            title="Stop capture and purge in-memory history"
+            className="capture-btn capture-btn-secondary"
+            aria-label="Stop clipboard capture"
+            title="Stop clipboard capture"
           >
             <StopIcon size={12} />
-            <span>Stop &amp; Clear</span>
+            <span>Stop</span>
           </button>
+
+          {hasItems && onClearHistory && (
+            <button
+              type="button"
+              onClick={onClearHistory}
+              disabled={isLoading}
+              className="capture-btn capture-btn-danger"
+              aria-label="Clear clipboard history"
+              title="Clear all saved and session history"
+            >
+              <TrashIcon size={12} />
+              <span>Clear History</span>
+            </button>
+          )}
         </div>
       </div>
     );
@@ -171,13 +209,27 @@ export const CaptureControlBar: FC<CaptureControlBarProps> = ({
           type="button"
           onClick={onStop}
           disabled={isLoading}
-          className="capture-btn capture-btn-danger"
-          aria-label="Stop clipboard capture and clear session"
-          title="Stop capture and purge in-memory history"
+          className="capture-btn capture-btn-secondary"
+          aria-label="Stop clipboard capture"
+          title="Stop clipboard capture"
         >
           <StopIcon size={12} />
-          <span>Stop &amp; Clear</span>
+          <span>Stop</span>
         </button>
+
+        {hasItems && onClearHistory && (
+          <button
+            type="button"
+            onClick={onClearHistory}
+            disabled={isLoading}
+            className="capture-btn capture-btn-danger"
+            aria-label="Clear clipboard history"
+            title="Clear all saved and session history"
+          >
+            <TrashIcon size={12} />
+            <span>Clear History</span>
+          </button>
+        )}
       </div>
     </div>
   );
