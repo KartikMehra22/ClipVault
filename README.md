@@ -1,19 +1,18 @@
 # ClipOrbit
 
-ClipOrbit is a privacy-first, local-first desktop clipboard manager designed to give users fast, secure, and structured control over their clipboard history, snippets, and shortcuts.
-
-> **Current Phase**: **Phase 1 — Repository Scaffold Only**. No application features, UI components, native clipboard listeners, or database models are implemented yet.
+ClipOrbit is a privacy-first, local-first desktop clipboard manager built with Electron, Next.js, React, TypeScript, and SQLite (via Prisma ORM). It gives users secure, structured control over clipboard history, pinned items, custom snippets, and privacy settings.
 
 ---
 
-## Planned Technology Stack
+## Architecture & Privacy Guarantees
 
-- **Desktop Shell**: Electron (native OS integration, global shortcuts, system tray, and restricted IPC)
-- **Renderer UI**: Next.js with React & TypeScript (context-isolated desktop interface)
-- **Local Persistence**: SQLite with Prisma ORM (local-first persistence)
-- **Contracts**: Shared TypeScript definitions for IPC and synchronization
-- **Remote Synchronization (Future)**: Express with PostgreSQL (optional cross-device sync)
-- **Monorepo Management**: pnpm workspaces & TypeScript
+- **Local-First & Offline**: All operations run locally on the user's machine. No cloud accounts, external telemetry, or remote services are required.
+- **Default-Off Clipboard Capture**: Clipboard capture is inactive upon launch. Monitoring only begins when the user explicitly clicks "Start Capture" in the interface.
+- **Default-Off Encrypted Persistence**: By default, clips exist solely in process memory. Long-term SQLite persistence is opt-in via Settings. If saving consent preferences fails, persistence fails closed.
+- **AES-256-GCM Encryption at Rest**: All persisted clipboard records and custom snippets are encrypted with AES-256-GCM using unique 12-byte initialization vectors and 16-byte authentication tags.
+- **OS Secure Storage (`safeStorage`)**: The 256-bit encryption master key is protected using the operating system's native credential store (macOS Keychain, Windows DPAPI, or Linux Secret Service/KWallet). Plaintext key fallback is strictly rejected.
+- **Sensitive Content Shield**: In-memory regex heuristics automatically scan copied text for credentials (private keys, AWS/GitHub/Stripe/Slack tokens, JWTs, Bearer headers) and excludes them before storage or UI presentation.
+- **Sandbox & Isolation**: The renderer runs with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`. Main-process IPC handlers strictly validate sender origins and frame hierarchy.
 
 ---
 
@@ -22,35 +21,128 @@ ClipOrbit is a privacy-first, local-first desktop clipboard manager designed to 
 ```
 cliporbit/
 ├── apps/
-│   ├── desktop/      # Electron main and preload process scaffolding
-│   ├── renderer/     # Next.js UI scaffolding
-│   └── api/          # Express sync API scaffolding
+│   ├── desktop/      # Electron main and preload process, lifecycle & crypto services
+│   ├── renderer/     # Next.js React UI (History, Pinned, Snippets, Settings)
+│   └── api/          # Express sync API scaffolding (future phase)
 ├── packages/
-│   ├── contracts/    # Shared IPC and sync contract definitions
-│   └── database/     # Prisma and SQLite persistence scaffolding
-├── docs/
-│   ├── architecture/ # System architecture and responsibility design
-│   ├── product/      # Product roadmap and phase planning
-│   └── security/     # Security principles, isolation, and threat modeling
-├── scripts/          # Workspace maintenance and build scripts
-└── .github/          # CI/CD and automation workflows
+│   ├── contracts/    # Shared TypeScript DTOs and IPC channel definitions
+│   └── database/     # Prisma client and SQLite repositories
+├── scripts/          # Port management, workspace typecheck, and packaging scripts
+└── .packaging/       # Staged production assets directory
 ```
 
 ---
 
-## High-Level Roadmap
+## Prerequisites
 
-- **Phase 1: Repository Scaffold & Configuration** _(Current)_
-- **Phase 2: Shared Contracts & Type Specifications**
-- **Phase 3: Local Persistence Layer (Prisma & SQLite)**
-- **Phase 4: Electron Native Desktop Integration & IPC Bridge**
-- **Phase 5: Renderer UI & Next.js Desktop Experience**
-- **Phase 6: Privacy Controls, Content Filtering & Local Encryption**
-- **Phase 7: Optional Remote Sync Service (Express & PostgreSQL)**
+- **Node.js**: `>= 22.0.0`
+- **pnpm**: `>= 10.0.0`
+- **Supported OS**: macOS (Apple Silicon / Intel), Windows 10/11, Linux with Secret Service / libsecret
 
-For detailed phase breakdowns, see [docs/product/ROADMAP.md](docs/product/ROADMAP.md).
-For architectural responsibilities, see [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
-For security guidelines, see [docs/security/SECURITY.md](docs/security/SECURITY.md).
+---
+
+## Installation & Setup
+
+Clone the repository and install workspace dependencies:
+
+```bash
+pnpm install
+```
+
+---
+
+## Running Locally
+
+### Development Mode
+
+Run the Next.js renderer and Electron main process concurrently:
+
+```bash
+pnpm run dev
+```
+
+- Automatically checks and ensures port `3000` is available.
+- Next.js development server starts on `http://127.0.0.1:3000`.
+- Electron starts and automatically polls/waits for the renderer to become available before displaying the window.
+
+### Production Mode (Local Static Build)
+
+Compile all packages and launch Electron using the static renderer export:
+
+```bash
+# 1. Build all packages (contracts, database, renderer export, desktop)
+pnpm run build
+
+# 2. Launch desktop shell
+pnpm --filter @cliporbit/desktop start
+```
+
+In production mode, Electron serves the pre-rendered static export (`apps/renderer/out`) through an internal loopback server bound strictly to `127.0.0.1`.
+
+---
+
+## Packaging Preparation
+
+To prepare and stage production assets:
+
+```bash
+pnpm run package:prepare
+```
+
+This command executes an ordered build across contracts, database, renderer, and desktop, then stages all distribution assets into `.packaging/`:
+
+- `.packaging/renderer/out`: Static HTML/CSS/JS export
+- `.packaging/prisma/`: Prisma schema and migration SQL files
+- `.packaging/desktop/dist/`: Compiled Electron main and preload bundles
+- `.packaging/packages/`: Compiled contract and database libraries
+
+---
+
+## Testing & Quality Assurance
+
+Run all workspace checks:
+
+```bash
+# Run unit, integration, and launch verification tests (225 passing tests)
+pnpm test
+
+# Run TypeScript typecheck across all workspace packages
+pnpm run typecheck
+
+# Run ESLint across all projects
+pnpm run lint
+
+# Check code formatting with Prettier
+pnpm run format:check
+
+# Auto-format code with Prettier
+pnpm run format
+```
+
+---
+
+## Data Storage Locations
+
+Runtime data is stored exclusively in Electron's platform-specific `userData` directory:
+
+| Operating System | Path                                       |
+| ---------------- | ------------------------------------------ |
+| **macOS**        | `~/Library/Application Support/ClipOrbit/` |
+| **Windows**      | `%APPDATA%\ClipOrbit\`                     |
+| **Linux**        | `~/.config/ClipOrbit/`                     |
+
+Within `userData`:
+
+- `data/cliporbit.sqlite`: SQLite database containing encrypted clips, snippets, and settings.
+- `crypto/master-key.enc`: 256-bit AES master key encrypted with OS `safeStorage` (permissions: `0600`).
+
+---
+
+## Known Limitations
+
+1. **Headless Linux Environments**: Requires an active Secret Service daemon (e.g. `gnome-keyring`, `ksecretsservice`) for Electron `safeStorage`. Without an OS-backed secure store, key initialization fails closed as designed.
+2. **Platform Installers**: Native installer targets (DMG, NSIS, AppImage) require platform code-signing certificates and distribution packaging tooling (`electron-builder`), which are not bundled in this local MVP. The application is fully runnable via `pnpm start` or the `.packaging/` staged bundle.
+3. **Remote Synchronization**: Multi-device sync (`apps/api`) is planned for future phases; this release is 100% local-first.
 
 ---
 
