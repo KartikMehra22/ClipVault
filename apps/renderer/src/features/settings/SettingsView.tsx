@@ -102,7 +102,10 @@ export const SettingsView: FC = () => {
           <div className="settings-group">
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-label-title">Launch at system login</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="settings-label-title">Launch at system login</span>
+                  <span className="settings-badge-planned">Planned</span>
+                </div>
                 <span className="settings-label-sub">
                   Automatically start ClipOrbit in the background on system startup.
                 </span>
@@ -111,13 +114,16 @@ export const SettingsView: FC = () => {
                 type="checkbox"
                 disabled
                 className="settings-toggle-disabled"
-                aria-label="Launch at system login (Disabled preview)"
+                aria-label="Launch at system login (Planned)"
               />
             </div>
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-label-title">Default view</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="settings-label-title">Default view</span>
+                  <span className="settings-badge-planned">Planned</span>
+                </div>
                 <span className="settings-label-sub">
                   Select which tab opens when launching or activating the window.
                 </span>
@@ -126,7 +132,7 @@ export const SettingsView: FC = () => {
                 disabled
                 className="settings-select-disabled"
                 defaultValue="history"
-                aria-label="Default view (Disabled preview)"
+                aria-label="Default view (Planned)"
               >
                 <option value="history">History</option>
                 <option value="pinned">Pinned</option>
@@ -252,7 +258,10 @@ export const SettingsView: FC = () => {
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-label-title">Exclude password managers</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="settings-label-title">Exclude password managers</span>
+                  <span className="settings-badge-planned">Planned</span>
+                </div>
                 <span className="settings-label-sub">
                   Ignore clipboard events originating from 1Password, Bitwarden, KeePass, and
                   Keychain.
@@ -264,13 +273,16 @@ export const SettingsView: FC = () => {
                 readOnly
                 disabled
                 className="settings-toggle-disabled"
-                aria-label="Exclude password managers (Disabled preview)"
+                aria-label="Exclude password managers (Planned)"
               />
             </div>
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-label-title">Mask detected secrets</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="settings-label-title">Mask detected secrets</span>
+                  <span className="settings-badge-planned">Planned</span>
+                </div>
                 <span className="settings-label-sub">
                   Hide potential API keys, passwords, and private tokens until revealed.
                 </span>
@@ -281,13 +293,16 @@ export const SettingsView: FC = () => {
                 readOnly
                 disabled
                 className="settings-toggle-disabled"
-                aria-label="Mask detected secrets (Disabled preview)"
+                aria-label="Mask detected secrets (Planned)"
               />
             </div>
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-label-title">Clear on exit</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="settings-label-title">Clear on exit</span>
+                  <span className="settings-badge-planned">Planned</span>
+                </div>
                 <span className="settings-label-sub">
                   Automatically purge unpinned clipboard history when closing the application.
                 </span>
@@ -296,7 +311,7 @@ export const SettingsView: FC = () => {
                 type="checkbox"
                 disabled
                 className="settings-toggle-disabled"
-                aria-label="Clear on exit (Disabled preview)"
+                aria-label="Clear on exit (Planned)"
               />
             </div>
           </div>
@@ -314,7 +329,10 @@ export const SettingsView: FC = () => {
           <div className="settings-group">
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-label-title">Maximum history size</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="settings-label-title">Maximum history size</span>
+                  <span className="settings-badge-planned">Planned</span>
+                </div>
                 <span className="settings-label-sub">
                   Oldest unpinned clips will be trimmed when this limit is reached.
                 </span>
@@ -323,7 +341,7 @@ export const SettingsView: FC = () => {
                 disabled
                 className="settings-select-disabled"
                 defaultValue="1000"
-                aria-label="Maximum history size (Disabled preview)"
+                aria-label="Maximum history size (Planned)"
               >
                 <option value="500">500 clips</option>
                 <option value="1000">1,000 clips</option>
@@ -333,7 +351,10 @@ export const SettingsView: FC = () => {
 
             <div className="settings-row">
               <div className="settings-row-label">
-                <span className="settings-label-title">Retention period</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="settings-label-title">Retention period</span>
+                  <span className="settings-badge-planned">Planned</span>
+                </div>
                 <span className="settings-label-sub">
                   Unpinned clips older than this duration will be automatically expired.
                 </span>
@@ -342,7 +363,7 @@ export const SettingsView: FC = () => {
                 disabled
                 className="settings-select-disabled"
                 defaultValue="30"
-                aria-label="Retention period (Disabled preview)"
+                aria-label="Retention period (Planned)"
               >
                 <option value="7">7 days</option>
                 <option value="30">30 days</option>

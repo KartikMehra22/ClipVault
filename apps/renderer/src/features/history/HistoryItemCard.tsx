@@ -5,6 +5,7 @@ import {
   PinIcon,
   TrashIcon,
   CopyIcon,
+  CheckIcon,
   EyeIcon,
   EyeOffIcon,
   ChevronDownIcon,
@@ -27,6 +28,21 @@ export interface HistoryItemCardProps {
 export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, onDelete }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [isRevealed, setIsRevealed] = useState<boolean>(false);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  const handleCopy = async () => {
+    if (typeof window !== 'undefined' && window.clipOrbit?.writeClipboardText) {
+      try {
+        const success = await window.clipOrbit.writeClipboardText(item.content);
+        if (success) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }
+      } catch (err) {
+        console.error('[ClipOrbit Renderer] Failed to copy clip to clipboard:', err);
+      }
+    }
+  };
 
   const isSensitive = Boolean(item.metadata?.isSensitive);
   const isMultiLine = item.content.includes('\n') || item.content.length > 120;
@@ -115,15 +131,15 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({ item, onTogglePin, o
             <PinIcon size={14} filled={item.isPinned} />
           </button>
 
-          {/* Copy Button (Disabled in capture-only engine phase) */}
+          {/* Copy Button */}
           <button
             type="button"
-            disabled
-            className="clip-action-btn clip-action-disabled"
-            aria-label="Clipboard write is disabled in this capture-only phase"
-            title="Writing back to clipboard is disabled in Phase 5.2 (capture-only)"
+            onClick={() => void handleCopy()}
+            className={`clip-action-btn ${copied ? 'clip-action-copied' : ''}`}
+            aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
+            title={copied ? 'Copied!' : 'Copy to clipboard'}
           >
-            <CopyIcon size={14} />
+            {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
           </button>
 
           {/* Delete Button */}

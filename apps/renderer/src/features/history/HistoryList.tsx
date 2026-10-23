@@ -107,11 +107,11 @@ export const HistoryList: FC<HistoryListProps> = ({
           <div className="capture-notice-box">
             <ShieldIcon size={16} />
             <div className="capture-notice-text">
-              <div className="capture-notice-title">In-Memory Session Only</div>
+              <div className="capture-notice-title">Privacy & Protection</div>
               <div>
-                When active, copied text is held strictly in process memory and is never written to
-                disk, saved in SQLite, or sent to the cloud. Automatic secret filtering is not
-                enabled in this phase.
+                When active, eligible copied text is held in process memory and automatically
+                scanned to filter out detected credentials. Encrypted local history saving can be
+                configured in Settings.
               </div>
             </div>
           </div>

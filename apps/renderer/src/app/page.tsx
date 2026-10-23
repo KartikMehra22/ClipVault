@@ -16,12 +16,12 @@ import type {
   CategoryFilterType,
   NavigationTab,
 } from '../features/history/types';
-import { DEMO_SNIPPETS } from '../features/snippets/mockSnippets';
 import { AppShell } from '../components/layout/AppShell';
 import { CategoryFilter } from '../components/ui/CategoryFilter';
 import { HistoryList } from '../features/history/HistoryList';
 import { CaptureControlBar } from '../features/history/CaptureControlBar';
 import { SnippetsView } from '../features/snippets/SnippetsView';
+
 import { SettingsView } from '../features/settings/SettingsView';
 import { ShieldIcon, TrashIcon } from '../components/common/Icons';
 
@@ -93,6 +93,7 @@ export default function HomePage() {
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [, setPersistedIds] = useState<Set<string>>(new Set());
+  const [snippetsCount, setSnippetsCount] = useState<number>(0);
   const [isConfirmingClear, setIsConfirmingClear] = useState<boolean>(false);
   const [captureStatus, setCaptureStatus] = useState<ClipboardStatusDto | null>(null);
   const [isLoadingAction, setIsLoadingAction] = useState<boolean>(false);
@@ -222,6 +223,18 @@ export default function HomePage() {
 
         // Load saved history regardless of whether capture is running
         await loadClips(() => isMounted);
+
+        // Load initial snippet count
+        if (window.clipOrbit.getSnippets) {
+          try {
+            const snips = await window.clipOrbit.getSnippets();
+            if (snips.success && Array.isArray(snips.snippets) && isMounted) {
+              setSnippetsCount(snips.snippets.length);
+            }
+          } catch {
+            // Ignore snippet count load error during startup
+          }
+        }
       } catch {
         if (isMounted) {
           setBridgeStatus('error');
@@ -280,13 +293,15 @@ export default function HomePage() {
     };
   }, [captureStatus?.isRunning, captureStatus?.isPaused, loadClips]);
 
-  // 3. Keyboard shortcut listener: Cmd/Ctrl+K to focus search input
+  // 3. Keyboard shortcut listener: Cmd/Ctrl+K to focus search input, Escape to dismiss dialogs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         const searchInput = document.querySelector<HTMLInputElement>('.search-bar-input');
         searchInput?.focus();
+      } else if (e.key === 'Escape') {
+        setIsConfirmingClear(false);
       }
     };
 
@@ -550,9 +565,9 @@ export default function HomePage() {
     () => ({
       history: items.length,
       pinned: items.filter((i) => i.isPinned).length,
-      snippets: DEMO_SNIPPETS.length,
+      snippets: snippetsCount,
     }),
-    [items],
+    [items, snippetsCount],
   );
 
   const isCaptureRunning = Boolean(captureStatus?.isRunning);
@@ -620,7 +635,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {activeTab === 'snippets' && <SnippetsView />}
+      {activeTab === 'snippets' && <SnippetsView onSnippetCountChange={setSnippetsCount} />}
 
       {activeTab === 'settings' && <SettingsView />}
 
@@ -630,6 +645,11 @@ export default function HomePage() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="clear-history-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isLoadingAction) {
+              setIsConfirmingClear(false);
+            }
+          }}
         >
           <div className="confirm-modal-box">
             <div className="confirm-modal-header">
