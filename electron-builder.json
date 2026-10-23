@@ -1,0 +1,60 @@
+{
+  "appId": "com.cliporbit.desktop",
+  "productName": "ClipOrbit",
+  "copyright": "Copyright © 2026 ClipOrbit Contributors",
+  "electronVersion": "44.9.3",
+  "asar": false,
+  "directories": {
+    "app": ".packaging",
+    "output": "dist-packages",
+    "buildResources": "apps/desktop/build-resources"
+  },
+  "files": ["desktop/**/*", "package.json"],
+  "extraResources": [
+    {
+      "from": ".packaging-modules",
+      "to": "app/node_modules"
+    },
+    {
+      "from": ".packaging/renderer/out",
+      "to": "renderer/out"
+    },
+    {
+      "from": ".packaging/prisma",
+      "to": "prisma"
+    }
+  ],
+  "mac": {
+    "category": "public.app-category.utilities",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["arm64"]
+      }
+    ],
+    "icon": "apps/desktop/build-resources/icon.icns",
+    "hardenedRuntime": false,
+    "gatekeeperAssess": false,
+    "identity": null
+  },
+  "dmg": {
+    "title": "ClipOrbit Installer",
+    "icon": "apps/desktop/build-resources/icon.icns",
+    "contents": [
+      {
+        "x": 130,
+        "y": 220
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ],
+    "window": {
+      "width": 540,
+      "height": 380
+    }
+  }
+}

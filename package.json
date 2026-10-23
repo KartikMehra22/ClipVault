@@ -1,6 +1,9 @@
 {
   "name": "cliporbit-monorepo",
   "version": "0.1.0",
+  "description": "Privacy-first, local-first desktop clipboard manager",
+  "author": "ClipOrbit Contributors",
+  "main": "apps/desktop/dist/main/index.js",
   "private": true,
   "packageManager": "pnpm@10.29.3",
   "engines": {
@@ -17,11 +20,13 @@
     "typecheck": "node scripts/typecheck.mjs",
     "test": "pnpm --filter @cliporbit/desktop test && pnpm --filter @cliporbit/database test",
     "package:prepare": "node scripts/prepare-packaging.mjs",
-    "clean": "pnpm -r --parallel exec rm -rf dist build out .next .tsbuildinfo .packaging"
+    "package:dmg": "pnpm run package:prepare && electron-builder --mac dmg",
+    "clean": "pnpm -r --parallel exec rm -rf dist build out .next .tsbuildinfo .packaging .packaging-modules dist-packages"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@next/eslint-plugin-next": "^16.4.2",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.22.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.1.0",

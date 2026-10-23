@@ -81,20 +81,32 @@ In production mode, Electron serves the pre-rendered static export (`apps/render
 
 ---
 
-## Packaging Preparation
+## Packaging & Distribution
 
-To prepare and stage production assets:
+### Staging Production Assets
+
+To compile all workspace projects and stage runtime assets into `.packaging/`:
 
 ```bash
 pnpm run package:prepare
 ```
 
-This command executes an ordered build across contracts, database, renderer, and desktop, then stages all distribution assets into `.packaging/`:
+This compiles contracts, database clients, static renderer export (`apps/renderer/out`), and Electron main/preload scripts.
 
-- `.packaging/renderer/out`: Static HTML/CSS/JS export
-- `.packaging/prisma/`: Prisma schema and migration SQL files
-- `.packaging/desktop/dist/`: Compiled Electron main and preload bundles
-- `.packaging/packages/`: Compiled contract and database libraries
+### Building macOS DMG Installer
+
+To package the standalone Apple Silicon `.dmg` installer:
+
+```bash
+pnpm run package:dmg
+```
+
+This runs the packaging preparation pipeline and builds the macOS drag-and-drop DMG installer via `electron-builder`:
+
+- **Installer Output**: `dist-packages/ClipOrbit-0.1.0-arm64.dmg`
+- **Application Bundle**: `dist-packages/mac-arm64/ClipOrbit.app`
+- **Custom Branding**: Bundled high-resolution multi-size app icon (`apps/desktop/build-resources/icon.icns`)
+- **Features**: Drag-to-Applications installer window, isolated local SQLite persistence, AES-256-GCM encryption at rest.
 
 ---
 
@@ -141,7 +153,7 @@ Within `userData`:
 ## Known Limitations
 
 1. **Headless Linux Environments**: Requires an active Secret Service daemon (e.g. `gnome-keyring`, `ksecretsservice`) for Electron `safeStorage`. Without an OS-backed secure store, key initialization fails closed as designed.
-2. **Platform Installers**: Native installer targets (DMG, NSIS, AppImage) require platform code-signing certificates and distribution packaging tooling (`electron-builder`), which are not bundled in this local MVP. The application is fully runnable via `pnpm start` or the `.packaging/` staged bundle.
+2. **Code Signing**: Local DMG builds are unsigned (`CSC_IDENTITY_AUTO_DISCOVERY=false`), requiring right-click -> "Open" on macOS Gatekeeper on machines without an Apple Developer ID certificate.
 3. **Remote Synchronization**: Multi-device sync (`apps/api`) is planned for future phases; this release is 100% local-first.
 
 ---

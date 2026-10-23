@@ -11,6 +11,8 @@ build/
 out/
 .next/
 .packaging/
+.packaging-modules/
+dist-packages/
 coverage/
 .nyc_output/
 
