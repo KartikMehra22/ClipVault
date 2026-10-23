@@ -15,6 +15,7 @@ import type {
   SnippetsResult,
   SnippetMutationResult,
 } from './snippets';
+import type { SettingKey, AppSettingsDto } from './settings';
 
 export interface DesktopInfo {
   appName: string;
@@ -38,6 +39,10 @@ export interface DesktopBridge {
   writeClipboardImage?(dataUrl: string): Promise<boolean>;
   getClipboardPersistenceEnabled(): Promise<boolean>;
   setClipboardPersistenceEnabled(enabled: boolean): Promise<boolean>;
+  getAllSettings(): Promise<AppSettingsDto>;
+  setSetting(key: SettingKey, value: string): Promise<boolean>;
+  getLaunchAtLogin(): Promise<boolean>;
+  setLaunchAtLogin(enabled: boolean): Promise<boolean>;
   getSnippets(options?: { language?: string }): Promise<SnippetsResult>;
   createSnippet(input: CreateSnippetInputDto): Promise<SnippetMutationResult>;
   updateSnippet(input: UpdateSnippetInputDto): Promise<SnippetMutationResult>;
@@ -60,6 +65,10 @@ export const IPC_CHANNELS = {
   CLIPBOARD_WRITE_IMAGE: 'clipboard:write-image',
   SETTINGS_GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SETTINGS_SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
+  SETTINGS_GET_ALL: 'settings:get-all',
+  SETTINGS_SET_VALUE: 'settings:set-value',
+  SETTINGS_GET_LAUNCH_AT_LOGIN: 'settings:get-launch-at-login',
+  SETTINGS_SET_LAUNCH_AT_LOGIN: 'settings:set-launch-at-login',
   SNIPPETS_LIST: 'snippets:list',
   SNIPPETS_CREATE: 'snippets:create',
   SNIPPETS_UPDATE: 'snippets:update',

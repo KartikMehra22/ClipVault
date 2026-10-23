@@ -399,6 +399,63 @@ export class ClipRepository {
     const result = await this.prisma.clip.deleteMany({ where });
     return result.count;
   }
+
+  /**
+   * Trims the oldest unpinned clips when the total clip count exceeds maxCount.
+   * Pinned clips are strictly preserved.
+   *
+   * Returns count of deleted records.
+   */
+  async trimUnpinned(maxCount: number): Promise<number> {
+    if (typeof maxCount !== 'number' || !Number.isInteger(maxCount) || maxCount < 1) {
+      throw new DatabaseValidationError(
+        `maxCount must be a positive integer. Received: ${String(maxCount)}`,
+      );
+    }
+
+    const total = await this.prisma.clip.count();
+    if (total <= maxCount) {
+      return 0;
+    }
+
+    const excess = total - maxCount;
+    const candidates = await this.prisma.clip.findMany({
+      where: { pinnedAt: null },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: excess,
+      select: { id: true },
+    });
+
+    if (candidates.length === 0) {
+      return 0;
+    }
+
+    const idsToDelete = candidates.map((c) => c.id);
+    const result = await this.prisma.clip.deleteMany({
+      where: { id: { in: idsToDelete } },
+    });
+
+    return result.count;
+  }
+
+  /**
+   * Deletes unpinned clips created on or before cutoffDate.
+   * Pinned clips are strictly preserved.
+   *
+   * Returns count of deleted records.
+   */
+  async deleteOlderThan(cutoffDate: Date): Promise<number> {
+    const validDate = validateDate(cutoffDate, 'cutoffDate');
+
+    const result = await this.prisma.clip.deleteMany({
+      where: {
+        pinnedAt: null,
+        createdAt: { lte: validDate },
+      },
+    });
+
+    return result.count;
+  }
 }
 
 export function createClipRepository(prisma: PrismaClient): ClipRepository {

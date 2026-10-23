@@ -325,6 +325,97 @@ test('Clip - deleteAll removes all clips without touching snippets or settings',
   assert.equal(checkSetting, 'persist_value', 'deleteAll must not touch app settings!');
 });
 
+test('Clip - trimUnpinned trims oldest unpinned clips while preserving pinned clips', async () => {
+  await clipRepo.deleteAll();
+
+  // Create 5 clips: 2 pinned, 3 unpinned
+  const c1 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+  });
+  const c2 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-02T00:00:00Z'),
+  });
+  await clipRepo.pin(c2.id); // pinned!
+
+  const c3 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-03T00:00:00Z'),
+  });
+  const c4 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-04T00:00:00Z'),
+  });
+  await clipRepo.pin(c4.id); // pinned!
+
+  const c5 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-05T00:00:00Z'),
+  });
+
+  // Total clips: 5. Trim to max 3. Excess is 2.
+  // Oldest unpinned are c1 and c3.
+  const deletedCount = await clipRepo.trimUnpinned(3);
+  assert.equal(deletedCount, 2);
+
+  // c1 and c3 deleted. c2 (pinned), c4 (pinned), and c5 (newest unpinned) remain.
+  assert.equal(await clipRepo.findById(c1.id), null);
+  assert.equal(await clipRepo.findById(c3.id), null);
+  assert.ok(await clipRepo.findById(c2.id));
+  assert.ok(await clipRepo.findById(c4.id));
+  assert.ok(await clipRepo.findById(c5.id));
+});
+
+test('Clip - deleteOlderThan purges unpinned clips older than cutoff while preserving pinned', async () => {
+  await clipRepo.deleteAll();
+
+  const c1 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+  });
+  const c2 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+  });
+  await clipRepo.pin(c2.id); // pinned old clip
+
+  const c3 = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 8,
+    createdAt: new Date('2026-01-10T00:00:00Z'),
+  });
+
+  const deleted = await clipRepo.deleteOlderThan(new Date('2026-01-05T00:00:00Z'));
+  assert.equal(deleted, 1);
+  assert.equal(await clipRepo.findById(c1.id), null);
+  assert.ok(await clipRepo.findById(c2.id), 'pinned clip must be preserved even if older than cutoff');
+  assert.ok(await clipRepo.findById(c3.id), 'newer clip must be preserved');
+});
+
 test('Clip - input validations and boundary checks', async () => {
   // Rejects invalid limit
   await assert.rejects(() => clipRepo.findRecent({ limit: 0 }), DatabaseValidationError);
