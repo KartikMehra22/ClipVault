@@ -3,7 +3,12 @@
  * Phase 5.2: Secure Clipboard Controls and Live History UI
  */
 
-import type { ClipboardStatusDto, CapturedClipDto } from './clipboard';
+import type {
+  ClipboardStatusDto,
+  CapturedClipDto,
+  PersistedClipsResult,
+  ClearHistoryResult,
+} from './clipboard';
 
 export interface DesktopInfo {
   appName: string;
@@ -19,6 +24,10 @@ export interface DesktopBridge {
   stopCapture(): Promise<ClipboardStatusDto>;
   getCaptureStatus(): Promise<ClipboardStatusDto>;
   getRecentClips(): Promise<CapturedClipDto[]>;
+  getPersistedClips(limit?: number): Promise<PersistedClipsResult>;
+  pinClip(id: string, isPinned: boolean): Promise<boolean>;
+  deleteClip(id: string): Promise<boolean>;
+  clearHistory(): Promise<ClearHistoryResult>;
   getClipboardPersistenceEnabled(): Promise<boolean>;
   setClipboardPersistenceEnabled(enabled: boolean): Promise<boolean>;
 }
@@ -31,6 +40,12 @@ export const IPC_CHANNELS = {
   CLIPBOARD_STOP: 'clipboard:stop',
   CLIPBOARD_GET_STATUS: 'clipboard:get-status',
   CLIPBOARD_GET_RECENT: 'clipboard:get-recent',
+  CLIPBOARD_GET_PERSISTED: 'clipboard:get-persisted',
+  CLIPBOARD_PIN: 'clipboard:pin',
+  CLIPBOARD_DELETE: 'clipboard:delete',
+  CLIPBOARD_CLEAR: 'clipboard:clear',
   SETTINGS_GET_CLIPBOARD_PERSISTENCE: 'settings:get-clipboard-persistence',
   SETTINGS_SET_CLIPBOARD_PERSISTENCE: 'settings:set-clipboard-persistence',
 } as const;
+
+export type { ClearHistoryResult };

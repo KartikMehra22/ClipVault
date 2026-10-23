@@ -363,7 +363,8 @@ export class ClipRepository {
   /**
    * Deletes expired clips where expiresAt <= referenceDate.
    *
-   * Unexpired clips (expiresAt > referenceDate or expiresAt IS NULL) are preserved.
+   * Unexpired clips (expiresAt > referenceDate or expiresAt IS NULL) and
+   * pinned clips (pinnedAt IS NOT NULL) are preserved.
    *
    * Returns the count of deleted records.
    */
@@ -376,9 +377,26 @@ export class ClipRepository {
           not: null,
           lte: validDate,
         },
+        pinnedAt: null,
       },
     });
 
+    return result.count;
+  }
+
+  /**
+   * Deletes all clips or all unpinned clips from the database.
+   *
+   * Only deletes records from the Clip table. Snippets and AppSettings are untouched.
+   * Returns the count of deleted records.
+   */
+  async deleteAll(options?: { unpinnedOnly?: boolean }): Promise<number> {
+    const where: Prisma.ClipWhereInput = {};
+    if (options?.unpinnedOnly) {
+      where.pinnedAt = null;
+    }
+
+    const result = await this.prisma.clip.deleteMany({ where });
     return result.count;
   }
 }

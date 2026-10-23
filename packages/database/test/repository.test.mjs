@@ -255,13 +255,27 @@ test('Clip - delete expired records without deleting unexpired records', async (
     expiresAt: null,
   });
 
+  // Pinned expired clip: must NOT be deleted by expiry
+  const pinnedExpiredClip = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 10,
+    expiresAt: pastDate,
+    pinnedAt: pastDate,
+  });
+
   // Run deleteExpired with reference date `now`
   const deletedCount = await clipRepo.deleteExpired(now);
   assert.ok(deletedCount >= 1);
 
-  // Verify expired clip was deleted
+  // Verify expired unpinned clip was deleted
   const checkExpired = await clipRepo.findById(expiredClip.id);
   assert.equal(checkExpired, null);
+
+  // Verify pinned expired clip was preserved
+  const checkPinnedExpired = await clipRepo.findById(pinnedExpiredClip.id);
+  assert.ok(checkPinnedExpired, 'Pinned clips must never be deleted by expiry!');
 
   // Verify future clip was preserved
   const checkFuture = await clipRepo.findById(futureClip.id);
@@ -270,6 +284,45 @@ test('Clip - delete expired records without deleting unexpired records', async (
   // Verify persistent clip without expiration was preserved
   const checkPersistent = await clipRepo.findById(persistentClip.id);
   assert.ok(checkPersistent);
+});
+
+test('Clip - deleteAll removes all clips without touching snippets or settings', async () => {
+  // Create a clip
+  const clip = await clipRepo.create({
+    contentType: 'text/plain',
+    encryptedPayload: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+    payloadByteLength: 10,
+  });
+
+  // Create a snippet
+  const snippet = await snippetRepo.create({
+    title: 'Keep this snippet',
+    encryptedContent: MOCK_FIXTURE_PAYLOAD,
+    encryptionNonce: MOCK_FIXTURE_NONCE,
+  });
+
+  // Create an app setting
+  await settingRepo.set('app.test.setting', 'persist_value');
+
+  // Run deleteAll
+  const deletedCount = await clipRepo.deleteAll();
+  assert.ok(deletedCount >= 1);
+
+  // Verify clips table is empty
+  const checkClip = await clipRepo.findById(clip.id);
+  assert.equal(checkClip, null);
+  const remainingClips = await clipRepo.findRecent();
+  assert.equal(remainingClips.length, 0);
+
+  // Verify snippets are intact
+  const checkSnippet = await snippetRepo.findById(snippet.id);
+  assert.ok(checkSnippet, 'deleteAll must not touch snippets!');
+  assert.equal(checkSnippet.title, 'Keep this snippet');
+
+  // Verify app settings are intact
+  const checkSetting = await settingRepo.get('app.test.setting');
+  assert.equal(checkSetting, 'persist_value', 'deleteAll must not touch app settings!');
 });
 
 test('Clip - input validations and boundary checks', async () => {
