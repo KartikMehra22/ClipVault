@@ -776,6 +776,7 @@ body {
   border-radius: var(--radius-md);
   padding: 0.75rem 0.9rem;
   transition: all var(--transition-fast);
+  cursor: pointer;
 }
 
 .clip-card:hover {
@@ -783,8 +784,24 @@ body {
   border-color: var(--border-moderate);
 }
 
+.clip-card:focus,
+.clip-card:focus-visible,
+.clip-card.clip-card-selected {
+  outline: none;
+  background-color: var(--bg-surface-hover);
+  border-color: var(--accent-primary, #6366f1);
+  box-shadow: 0 0 0 1.5px rgba(99, 102, 241, 0.4);
+}
+
 .clip-card-pinned {
   border-left: 3px solid #f59e0b;
+}
+
+.clip-card-pinned.clip-card-selected,
+.clip-card-pinned:focus,
+.clip-card-pinned:focus-visible {
+  border-left: 3px solid #f59e0b;
+  border-color: var(--accent-primary, #6366f1);
 }
 
 .clip-card-sensitive {

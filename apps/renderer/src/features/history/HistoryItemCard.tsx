@@ -31,9 +31,13 @@ import {
 
 export interface HistoryItemCardProps {
   item: ClipboardItem;
+  isSelected?: boolean;
   maskSecrets?: boolean;
   onTogglePin: (id: string) => void;
   onDelete: (id: string) => void;
+  onSelect?: (id: string) => void;
+  onHover?: (id: string) => void;
+  onHoverEnd?: (id: string) => void;
 }
 
 /**
@@ -64,9 +68,13 @@ function getPlatformIcon(platformId?: string, size = 13) {
 
 export const HistoryItemCard: FC<HistoryItemCardProps> = ({
   item,
+  isSelected = false,
   maskSecrets = true,
   onTogglePin,
   onDelete,
+  onSelect,
+  onHover,
+  onHoverEnd,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [isRevealed, setIsRevealed] = useState<boolean>(!maskSecrets);
@@ -153,9 +161,16 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
   return (
     <article
       data-clip-id={item.id}
+      tabIndex={0}
+      onClick={() => onSelect?.(item.id)}
+      onFocus={() => onSelect?.(item.id)}
+      onMouseEnter={() => onHover?.(item.id)}
+      onMouseLeave={() => onHoverEnd?.(item.id)}
       className={`clip-card ${item.isPinned ? 'clip-card-pinned' : ''} ${
         isSensitive ? 'clip-card-sensitive' : ''
-      } ${social ? 'clip-card-social-wrapper' : ''}`}
+      } ${social ? 'clip-card-social-wrapper' : ''} ${
+        isSelected ? 'clip-card-selected' : ''
+      }`}
       aria-label={`${social ? social.platform : getTypeLabel()} copied from ${item.sourceApp}`}
     >
       {/* Card Header: Metadata badges & Contextual Actions */}
@@ -214,7 +229,10 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
           {/* Pin Toggle */}
           <button
             type="button"
-            onClick={() => onTogglePin(item.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin(item.id);
+            }}
             className={`clip-action-btn ${item.isPinned ? 'clip-action-pinned' : ''}`}
             aria-label={item.isPinned ? 'Unpin this clip' : 'Pin this clip'}
             title={item.isPinned ? 'Unpin' : 'Pin for this session'}
@@ -225,7 +243,10 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
           {/* Copy Button */}
           <button
             type="button"
-            onClick={() => void handleCopy()}
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleCopy();
+            }}
             className={`clip-action-btn ${copied ? 'clip-action-copied' : ''}`}
             aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
             title={copied ? 'Copied!' : 'Copy to clipboard'}
@@ -236,7 +257,10 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
           {/* Delete Button */}
           <button
             type="button"
-            onClick={() => onDelete(item.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(item.id);
+            }}
             className="clip-action-btn clip-action-delete"
             aria-label="Remove clip from session"
             title="Remove from session"
@@ -253,7 +277,10 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
           <span>{item.metadata?.sensitiveReason || 'Sensitive content detected'}</span>
           <button
             type="button"
-            onClick={() => setIsRevealed(!isRevealed)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsRevealed(!isRevealed);
+            }}
             className="clip-reveal-btn"
           >
             {isRevealed ? <EyeOffIcon size={12} /> : <EyeIcon size={12} />}

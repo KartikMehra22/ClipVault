@@ -12,6 +12,7 @@ import {
 
 export interface HistoryListProps {
   items: ClipboardItem[];
+  selectedId?: string | null;
   activeFilter: CategoryFilterType;
   searchQuery: string;
   isPinnedOnly?: boolean;
@@ -23,10 +24,14 @@ export interface HistoryListProps {
   onTogglePin: (id: string) => void;
   onDelete: (id: string) => void;
   onClearSearch: () => void;
+  onSelect?: (id: string) => void;
+  onHover?: (id: string) => void;
+  onHoverEnd?: (id: string) => void;
 }
 
 export const HistoryList: FC<HistoryListProps> = ({
   items,
+  selectedId,
   activeFilter,
   searchQuery,
   isPinnedOnly = false,
@@ -38,6 +43,9 @@ export const HistoryList: FC<HistoryListProps> = ({
   onTogglePin,
   onDelete,
   onClearSearch,
+  onSelect,
+  onHover,
+  onHoverEnd,
 }) => {
   if (items.length === 0) {
     if (searchQuery.trim().length > 0) {
@@ -149,9 +157,13 @@ export const HistoryList: FC<HistoryListProps> = ({
         <HistoryItemCard
           key={item.id}
           item={item}
+          isSelected={item.id === selectedId}
           maskSecrets={maskSecrets}
           onTogglePin={onTogglePin}
           onDelete={onDelete}
+          onSelect={onSelect}
+          onHover={onHover}
+          onHoverEnd={onHoverEnd}
         />
       ))}
     </div>

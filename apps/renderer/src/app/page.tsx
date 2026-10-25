@@ -137,6 +137,13 @@ export default function HomePage() {
     'connecting',
   );
 
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
+
+  const hoveredIdRef = useRef<string | null>(null);
+  const filteredItemsRef = useRef<ClipboardItem[]>([]);
+
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
@@ -453,9 +460,13 @@ export default function HomePage() {
     // For in-memory unsaved clips, pin status remains preserved purely in active session memory
   }, []);
 
-  // 4b. Keyboard shortcut listener: Cmd/Ctrl+K to focus search, Cmd/Ctrl+P to pin/unpin, Escape to dismiss dialogs
+  // 4b. Keyboard shortcut listener: Cmd/Ctrl+K to focus search, Cmd/Ctrl+P to pin/unpin, Arrow navigation, Escape to dismiss dialogs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const isInputFocused =
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA';
+
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         const searchInput = document.querySelector<HTMLInputElement>('.search-bar-input');
@@ -465,10 +476,45 @@ export default function HomePage() {
         const activeEl = document.activeElement;
         const card = activeEl?.closest('.clip-card');
         const clipId = card?.getAttribute('data-clip-id');
-        if (clipId) {
-          void handleTogglePin(clipId);
-        } else if (itemsRef.current.length > 0) {
-          void handleTogglePin(itemsRef.current[0].id);
+        const hoveredClipId = hoveredIdRef.current;
+        const selectedClipId = selectedIdRef.current;
+        const currentVisible = filteredItemsRef.current;
+
+        let targetId: string | undefined;
+        if (clipId && currentVisible.some((i) => i.id === clipId)) {
+          targetId = clipId;
+        } else if (hoveredClipId && currentVisible.some((i) => i.id === hoveredClipId)) {
+          targetId = hoveredClipId;
+        } else if (selectedClipId && currentVisible.some((i) => i.id === selectedClipId)) {
+          targetId = selectedClipId;
+        } else if (currentVisible.length > 0) {
+          // Fallback: target the top item of the ACTIVE section/category
+          targetId = currentVisible[0].id;
+        }
+
+        if (targetId) {
+          setSelectedId(targetId);
+          void handleTogglePin(targetId);
+        }
+      } else if (!isInputFocused && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        const itemsList = filteredItemsRef.current;
+        if (itemsList.length > 0) {
+          e.preventDefault();
+          const currentIndex = itemsList.findIndex((i) => i.id === selectedIdRef.current);
+          let nextIndex = 0;
+          if (e.key === 'ArrowDown') {
+            nextIndex =
+              currentIndex >= 0 && currentIndex < itemsList.length - 1 ? currentIndex + 1 : 0;
+          } else {
+            nextIndex = currentIndex > 0 ? currentIndex - 1 : itemsList.length - 1;
+          }
+          const nextItem = itemsList[nextIndex];
+          if (nextItem) {
+            setSelectedId(nextItem.id);
+            const cardEl = document.querySelector<HTMLElement>(`[data-clip-id="${nextItem.id}"]`);
+            cardEl?.focus();
+            cardEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
         }
       } else if (e.key === 'Escape') {
         setIsConfirmingClear(false);
@@ -638,6 +684,32 @@ export default function HomePage() {
     return result;
   }, [baseTabItems, typeFilter, searchQuery]);
 
+  filteredItemsRef.current = filteredItems;
+
+  const handleSelectCard = useCallback((id: string) => {
+    setSelectedId(id);
+  }, []);
+
+  const handleHoverCard = useCallback((id: string) => {
+    hoveredIdRef.current = id;
+  }, []);
+
+  const handleHoverCardEnd = useCallback((id: string) => {
+    if (hoveredIdRef.current === id) {
+      hoveredIdRef.current = null;
+    }
+  }, []);
+
+  const handleSelectTypeFilter = useCallback((filter: CategoryFilterType) => {
+    setTypeFilter(filter);
+    setSelectedId(null);
+  }, []);
+
+  const handleSelectTab = useCallback((tab: NavigationTab) => {
+    setActiveTab(tab);
+    setSelectedId(null);
+  }, []);
+
   const sidebarCounts = useMemo(
     () => ({
       history: items.length,
@@ -652,7 +724,7 @@ export default function HomePage() {
   return (
     <AppShell
       activeTab={activeTab}
-      onSelectTab={setActiveTab}
+      onSelectTab={handleSelectTab}
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
       onSearchClear={handleClearSearch}
@@ -692,12 +764,13 @@ export default function HomePage() {
 
           <CategoryFilter
             activeFilter={typeFilter}
-            onSelect={setTypeFilter}
+            onSelect={handleSelectTypeFilter}
             counts={categoryCounts}
           />
 
           <HistoryList
             items={filteredItems}
+            selectedId={selectedId}
             activeFilter={typeFilter}
             searchQuery={searchQuery}
             isPinnedOnly={activeTab === 'pinned'}
@@ -709,6 +782,9 @@ export default function HomePage() {
             onTogglePin={handleTogglePin}
             onDelete={handleDelete}
             onClearSearch={handleClearSearch}
+            onSelect={handleSelectCard}
+            onHover={handleHoverCard}
+            onHoverEnd={handleHoverCardEnd}
           />
         </div>
       )}
