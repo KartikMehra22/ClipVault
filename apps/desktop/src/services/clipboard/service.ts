@@ -315,26 +315,11 @@ export class ClipboardCaptureService {
     this.isPollingActive = true;
 
     try {
-      // Check password manager / concealed content exclusion
-      if (typeof this.adapter.isConcealed === 'function') {
-        const isConcealed = await this.adapter.isConcealed();
-        if (isConcealed) {
-          const shouldExclude =
-            typeof this.config.isExcludePasswordManagersEnabled === 'function'
-              ? await this.config.isExcludePasswordManagersEnabled()
-              : true;
-          if (shouldExclude) {
-            this.skippedSensitiveCount += 1;
-            return;
-          }
-        }
-      }
-
       const text = await this.adapter.readText();
 
       // Branch 1: Text content present
       if (text && typeof text === 'string' && text.length > 0) {
-        // Rule 2: Compute fingerprint and detect changes
+        // Rule 1: Compute fingerprint and detect changes
         const fingerprint = computeFingerprint(text);
         if (fingerprint === this.lastFingerprint) {
           // Content unchanged
@@ -343,6 +328,21 @@ export class ClipboardCaptureService {
 
         // Value has changed: update last observed fingerprint
         this.lastFingerprint = fingerprint;
+
+        // Rule 2: Check password manager / concealed content exclusion
+        if (typeof this.adapter.isConcealed === 'function') {
+          const isConcealed = await this.adapter.isConcealed();
+          if (isConcealed) {
+            const shouldExclude =
+              typeof this.config.isExcludePasswordManagersEnabled === 'function'
+                ? await this.config.isExcludePasswordManagersEnabled()
+                : true;
+            if (shouldExclude) {
+              this.skippedSensitiveCount += 1;
+              return;
+            }
+          }
+        }
 
         // Rule 3: Enforce single-item byte size limit
         const byteLength = Buffer.byteLength(text, 'utf8');
@@ -410,6 +410,21 @@ export class ClipboardCaptureService {
           }
 
           this.lastFingerprint = fingerprint;
+
+          // Check password manager / concealed content exclusion for images
+          if (typeof this.adapter.isConcealed === 'function') {
+            const isConcealed = await this.adapter.isConcealed();
+            if (isConcealed) {
+              const shouldExclude =
+                typeof this.config.isExcludePasswordManagersEnabled === 'function'
+                  ? await this.config.isExcludePasswordManagersEnabled()
+                  : true;
+              if (shouldExclude) {
+                this.skippedSensitiveCount += 1;
+                return;
+              }
+            }
+          }
 
           // Enforce image safe size ceiling (10 MiB)
           if (img.byteLength > MAX_SAFE_IMAGE_BYTE_LENGTH) {
