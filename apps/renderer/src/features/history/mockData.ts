@@ -57,8 +57,8 @@ export const INITIAL_MOCK_ITEMS: ClipboardItem[] = [
   {
     id: 'clip-5',
     type: 'email',
-    content: 'security-team@cliporbit.local',
-    previewTitle: 'ClipOrbit Security Contacts',
+    content: 'security-team@clipvault.local',
+    previewTitle: 'ClipVault Security Contacts',
     sourceApp: 'Mail',
     copiedAt: '3h ago',
     isPinned: false,

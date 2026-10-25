@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ClipOrbit',
+  title: 'ClipVault',
   description: 'Privacy-first, local-first desktop clipboard manager',
 };
 

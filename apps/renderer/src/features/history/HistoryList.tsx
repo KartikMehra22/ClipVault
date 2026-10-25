@@ -110,7 +110,7 @@ export const HistoryList: FC<HistoryListProps> = ({
 
           <h2 className="capture-inactive-title">Clipboard Capture is Inactive</h2>
           <p className="capture-inactive-desc">
-            Clipboard monitoring is stopped by default. ClipOrbit will not observe or record your
+            Clipboard monitoring is stopped by default. ClipVault will not observe or record your
             clipboard until you explicitly enable capture.
           </p>
 

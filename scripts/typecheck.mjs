@@ -84,7 +84,7 @@ function discoverWorkspacePackages() {
 }
 
 function run() {
-  console.log('ClipOrbit — Workspace Type Check Runner\n');
+  console.log('ClipVault — Workspace Type Check Runner\n');
 
   const packages = discoverWorkspacePackages();
   let hasFailures = false;

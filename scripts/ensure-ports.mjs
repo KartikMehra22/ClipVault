@@ -17,12 +17,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-// Parse ports from command line arguments or use default ClipOrbit ports (3000 for Renderer)
+// Parse ports from command line arguments or use default ClipVault ports (3000 for Renderer)
 const args = process.argv.slice(2);
 const targetPorts =
   args.length > 0 ? args.map((p) => parseInt(p, 10)).filter((p) => !isNaN(p) && p > 0) : [3000];
 
-console.log(`[ClipOrbit] Inspecting required ports: ${targetPorts.join(', ')}...`);
+console.log(`[ClipVault] Inspecting required ports: ${targetPorts.join(', ')}...`);
 
 function getParentPid(pid) {
   try {

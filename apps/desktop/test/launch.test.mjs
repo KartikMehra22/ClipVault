@@ -107,8 +107,11 @@ test('Application Launch — Electron boots, initializes services in userData, a
   );
   assert.ok(
     stdout.includes(
-      '[ClipOrbit Main] Smoke test startup verified successfully. Initiating clean exit...',
-    ),
+      '[ClipVault Main] Smoke test startup verified successfully. Initiating clean exit...',
+    ) ||
+      stdout.includes(
+        '[ClipOrbit Main] Smoke test startup verified successfully. Initiating clean exit...',
+      ),
     'Should verify smoke test success hook',
   );
 

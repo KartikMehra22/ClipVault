@@ -42,14 +42,14 @@ export const Sidebar: FC<SidebarProps> = ({
   bridgeStatus,
 }) => {
   return (
-    <aside className="app-sidebar" aria-label="ClipOrbit Main Navigation">
+    <aside className="app-sidebar" aria-label="ClipVault Main Navigation">
       {/* Brand Header */}
       <div className="sidebar-brand">
         <div className="sidebar-logo-container">
           <LogoIcon size={22} />
         </div>
         <div className="sidebar-brand-text">
-          <span className="sidebar-brand-title">ClipOrbit</span>
+          <span className="sidebar-brand-title">ClipVault</span>
           <span className="sidebar-brand-tag">v0.1.0</span>
         </div>
       </div>
@@ -93,7 +93,7 @@ export const Sidebar: FC<SidebarProps> = ({
           />
           <span className="sidebar-footer-label">
             {bridgeStatus === 'connected'
-              ? `${desktopInfo?.appName || 'ClipOrbit'} Desktop`
+              ? `${desktopInfo?.appName || 'ClipVault'} Desktop`
               : 'Local Sandbox Mode'}
           </span>
         </div>

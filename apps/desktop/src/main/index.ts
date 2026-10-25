@@ -23,7 +23,7 @@ let ipcRegistered = false;
 
 const isDev = !app.isPackaged;
 
-app.name = 'ClipOrbit';
+app.name = 'ClipVault';
 
 /**
  * Returns the currently authorized renderer origin for frame validation.
@@ -53,14 +53,14 @@ function isAuthorizedSender(event: IpcMainInvokeEvent): boolean {
 function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
   if (!isAuthorizedSender(event)) {
     console.warn(
-      '[ClipOrbit Main] Security Warning: Rejected unauthorized IPC request from sender URL:',
+      '[ClipVault Main] Security Warning: Rejected unauthorized IPC request from sender URL:',
       event.senderFrame?.url || '<unknown>',
     );
     throw new Error('Unauthorized IPC sender origin or frame.');
   }
 
   const info: DesktopInfo = {
-    appName: app.name || 'ClipOrbit',
+    appName: app.name || 'ClipVault',
     appVersion: app.getVersion() || '0.1.0',
     platform: process.platform,
   };
@@ -203,7 +203,7 @@ async function loadRendererWithRetry(
           err,
         );
         dialog.showErrorBox(
-          'ClipOrbit — Renderer Connection Failed',
+          'ClipVault — Renderer Connection Failed',
           `Could not connect to the renderer at ${targetUrl}.\n\n` +
             `Ensure the Next.js development server is running ("pnpm dev") or compile production assets ("pnpm build").`,
         );
@@ -222,11 +222,11 @@ function createWindow(): BrowserWindow {
   }
 
   const preloadPath = path.join(__dirname, '../preload/index.js');
-  console.log('[ClipOrbit Main] Initializing BrowserWindow (Title: "ClipOrbit", Size: 960x640)');
-  console.log('[ClipOrbit Main] Preload script path:', preloadPath);
+  console.log('[ClipVault Main] Initializing BrowserWindow (Title: "ClipVault", Size: 960x640)');
+  console.log('[ClipVault Main] Preload script path:', preloadPath);
 
   mainWindow = new BrowserWindow({
-    title: 'ClipOrbit',
+    title: 'ClipVault',
     width: 960,
     height: 640,
     minWidth: 640,
@@ -410,9 +410,9 @@ if (!gotSingleInstanceLock) {
     }
 
     // Automated smoke test verification hook
-    if (process.env.CLIPORBIT_SMOKE_TEST === '1') {
+    if (process.env.CLIPVAULT_SMOKE_TEST === '1' || process.env.CLIPORBIT_SMOKE_TEST === '1') {
       console.log(
-        '[ClipOrbit Main] Smoke test startup verified successfully. Initiating clean exit...',
+        '[ClipVault Main] Smoke test startup verified successfully. Initiating clean exit...',
       );
       setTimeout(() => {
         app.quit();

@@ -1,8 +1,8 @@
 {
-  "name": "cliporbit-monorepo",
+  "name": "clipvault-monorepo",
   "version": "0.1.0",
   "description": "Privacy-first, local-first desktop clipboard manager",
-  "author": "ClipOrbit Contributors",
+  "author": "ClipVault Contributors",
   "main": "apps/desktop/dist/main/index.js",
   "private": true,
   "packageManager": "pnpm@10.29.3",

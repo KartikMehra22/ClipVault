@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const rootDir = path.resolve(path.dirname(__filename), '..');
 
-console.log('=== ClipOrbit Production Packaging Preparation ===');
+console.log('=== ClipVault Production Packaging Preparation ===');
 console.log('Root directory:', rootDir);
 
 // 0. Verify workspace
@@ -230,5 +230,5 @@ if (fs.existsSync(dotPrismaSource)) {
   console.log('  ↳ .prisma client engines staged to runtime modules');
 }
 
-console.log('\n=== ClipOrbit Packaging Preparation Complete! ===');
+console.log('\n=== ClipVault Packaging Preparation Complete! ===');
 console.log('All static assets, database migrations, and runtime node_modules staged.');

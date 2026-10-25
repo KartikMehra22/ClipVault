@@ -1,6 +1,6 @@
-# ClipOrbit
+# ClipVault
 
-ClipOrbit is a privacy-first, local-first desktop clipboard manager built with Electron, Next.js, React, TypeScript, and SQLite (via Prisma ORM). It gives users secure, structured control over clipboard history, pinned items, custom snippets, and privacy settings.
+ClipVault is a privacy-first, local-first desktop clipboard manager built with Electron, Next.js, React, TypeScript, and SQLite (via Prisma ORM). It gives users secure, structured control over clipboard history, pinned items, custom snippets, and privacy settings.
 
 ---
 
@@ -19,7 +19,7 @@ ClipOrbit is a privacy-first, local-first desktop clipboard manager built with E
 ## Workspace Structure
 
 ```
-cliporbit/
+clipvault/
 ├── apps/
 │   ├── desktop/      # Electron main and preload process, lifecycle & crypto services
 │   ├── renderer/     # Next.js React UI (History, Pinned, Snippets, Settings)
@@ -103,8 +103,8 @@ pnpm run package:dmg
 
 This runs the packaging preparation pipeline and builds the macOS drag-and-drop DMG installer via `electron-builder`:
 
-- **Installer Output**: `dist-packages/ClipOrbit-0.1.0-arm64.dmg`
-- **Application Bundle**: `dist-packages/mac-arm64/ClipOrbit.app`
+- **Installer Output**: `dist-packages/ClipVault-0.1.0-arm64.dmg`
+- **Application Bundle**: `dist-packages/mac-arm64/ClipVault.app`
 - **Custom Branding**: Bundled high-resolution multi-size app icon (`apps/desktop/build-resources/icon.icns`)
 - **Features**: Drag-to-Applications installer window, isolated local SQLite persistence, AES-256-GCM encryption at rest.
 
@@ -139,9 +139,9 @@ Runtime data is stored exclusively in Electron's platform-specific `userData` di
 
 | Operating System | Path                                       |
 | ---------------- | ------------------------------------------ |
-| **macOS**        | `~/Library/Application Support/ClipOrbit/` |
-| **Windows**      | `%APPDATA%\ClipOrbit\`                     |
-| **Linux**        | `~/.config/ClipOrbit/`                     |
+| **macOS**        | `~/Library/Application Support/ClipVault/` |
+| **Windows**      | `%APPDATA%\ClipVault\`                     |
+| **Linux**        | `~/.config/ClipVault/`                     |
 
 Within `userData`:
 

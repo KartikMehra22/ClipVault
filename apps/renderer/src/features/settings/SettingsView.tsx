@@ -277,7 +277,7 @@ export const SettingsView: FC = () => {
               <div className="settings-row-label">
                 <span className="settings-label-title">Launch at system login</span>
                 <span className="settings-label-sub">
-                  Automatically start ClipOrbit in the background on system startup.
+                  Automatically start ClipVault in the background on system startup.
                 </span>
               </div>
               <input
@@ -329,7 +329,7 @@ export const SettingsView: FC = () => {
               <div className="settings-row-label">
                 <span className="settings-label-title">Global window toggle</span>
                 <span className="settings-label-sub">
-                  Shortcut to summon and dismiss ClipOrbit from any application.
+                  Shortcut to summon and dismiss ClipVault from any application.
                 </span>
               </div>
               <kbd className="settings-kbd">⌥ Space</kbd>
@@ -554,7 +554,7 @@ export const SettingsView: FC = () => {
             <div className="settings-row">
               <div className="settings-row-label">
                 <span className="settings-label-title">Interface theme</span>
-                <span className="settings-label-sub">ClipOrbit desktop color scheme.</span>
+                <span className="settings-label-sub">ClipVault desktop color scheme.</span>
               </div>
               <span className="settings-pill-active">Dark Slate (Default)</span>
             </div>

@@ -284,4 +284,5 @@ const desktopBridge: DesktopBridge = {
   },
 };
 
+contextBridge.exposeInMainWorld('clipVault', desktopBridge);
 contextBridge.exposeInMainWorld('clipOrbit', desktopBridge);

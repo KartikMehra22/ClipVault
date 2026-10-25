@@ -1,7 +1,7 @@
 {
-  "appId": "com.cliporbit.desktop",
-  "productName": "ClipOrbit",
-  "copyright": "Copyright © 2026 ClipOrbit Contributors",
+  "appId": "com.clipvault.desktop",
+  "productName": "ClipVault",
+  "copyright": "Copyright © 2026 ClipVault Contributors",
   "electronVersion": "44.9.3",
   "asar": false,
   "directories": {
@@ -38,7 +38,7 @@
     "identity": null
   },
   "dmg": {
-    "title": "ClipOrbit Installer",
+    "title": "ClipVault Installer",
     "icon": "apps/desktop/build-resources/icon.icns",
     "contents": [
       {
