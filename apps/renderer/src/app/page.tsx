@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   mergeHistoryClips,
+  detectSocialLink,
   type DesktopInfo,
   type ClipboardStatusDto,
   type CapturedClipDto,
@@ -48,10 +49,20 @@ function formatCopiedAt(timestamp: string | Date): string {
  */
 export function mapMergedClipDtoToItem(dto: MergedClipDto): ClipboardItem {
   const isImage = dto.category === 'image' || dto.text.startsWith('data:image/');
-  const type: ClipboardContentType = isImage ? 'image' : dto.category === 'url' ? 'link' : dto.category;
+  const socialLink = !isImage ? detectSocialLink(dto.text) : null;
+  const isLink = dto.category === 'url' || Boolean(socialLink);
+  const type: ClipboardContentType = isImage
+    ? 'image'
+    : isLink || dto.category === 'url'
+      ? 'link'
+      : dto.category === 'email'
+        ? 'email'
+        : dto.category === 'code'
+          ? 'code'
+          : 'text';
 
-  let domain: string | undefined;
-  if (dto.category === 'url') {
+  let domain: string | undefined = socialLink?.domain;
+  if (!domain && dto.category === 'url') {
     try {
       domain = new URL(dto.text).hostname;
     } catch {
@@ -64,7 +75,13 @@ export function mapMergedClipDtoToItem(dto: MergedClipDto): ClipboardItem {
   const copiedAt = formatCopiedAt(dto.createdAt);
 
   let previewTitle: string | undefined;
-  if (dto.category === 'url') {
+  if (socialLink) {
+    if (socialLink.isSocial) {
+      previewTitle = `${socialLink.platform} • ${socialLink.contentType}`;
+    } else {
+      previewTitle = `${socialLink.platform} • Web Link`;
+    }
+  } else if (dto.category === 'url') {
     previewTitle = domain || 'Web Link';
   } else if (isImage) {
     previewTitle = 'Image';
@@ -94,6 +111,7 @@ export function mapMergedClipDtoToItem(dto: MergedClipDto): ClipboardItem {
       wordCount,
       domain,
       dimensions,
+      socialLink: socialLink ?? undefined,
       isSensitive: false,
     },
   };
@@ -603,8 +621,17 @@ export default function HomePage() {
         const titleMatch = item.previewTitle?.toLowerCase().includes(query);
         const langMatch = item.metadata?.language?.toLowerCase().includes(query);
         const domainMatch = item.metadata?.domain?.toLowerCase().includes(query);
+        const socialMatch = Boolean(
+          item.metadata?.socialLink?.platform.toLowerCase().includes(query) ||
+            item.metadata?.socialLink?.category.toLowerCase().includes(query) ||
+            item.metadata?.socialLink?.contentType.toLowerCase().includes(query) ||
+            item.metadata?.socialLink?.description.toLowerCase().includes(query) ||
+            item.metadata?.socialLink?.pathSummary?.toLowerCase().includes(query),
+        );
 
-        return Boolean(contentMatch || sourceMatch || titleMatch || langMatch || domainMatch);
+        return Boolean(
+          contentMatch || sourceMatch || titleMatch || langMatch || domainMatch || socialMatch,
+        );
       });
     }
 

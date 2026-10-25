@@ -1,4 +1,4 @@
-import { useState, type FC } from 'react';
+import { useState, type FC, type MouseEvent } from 'react';
 import type { ClipboardItem } from './types';
 import { Badge } from '../../components/common/Badge';
 import {
@@ -17,6 +17,16 @@ import {
   EmailIcon,
   ImageIcon,
   LockIcon,
+  ExternalLinkIcon,
+  GlobeIcon,
+  YouTubeIcon,
+  TwitterIcon,
+  InstagramIcon,
+  GithubIcon,
+  LinkedinIcon,
+  RedditIcon,
+  DiscordIcon,
+  SpotifyIcon,
 } from '../../components/common/Icons';
 
 export interface HistoryItemCardProps {
@@ -24,6 +34,32 @@ export interface HistoryItemCardProps {
   maskSecrets?: boolean;
   onTogglePin: (id: string) => void;
   onDelete: (id: string) => void;
+}
+
+/**
+ * Returns a dedicated brand SVG icon for a recognized platform ID.
+ */
+function getPlatformIcon(platformId?: string, size = 13) {
+  switch (platformId) {
+    case 'youtube':
+      return <YouTubeIcon size={size} />;
+    case 'twitter':
+      return <TwitterIcon size={size} />;
+    case 'instagram':
+      return <InstagramIcon size={size} />;
+    case 'github':
+      return <GithubIcon size={size} />;
+    case 'linkedin':
+      return <LinkedinIcon size={size} />;
+    case 'reddit':
+      return <RedditIcon size={size} />;
+    case 'discord':
+      return <DiscordIcon size={size} />;
+    case 'spotify':
+      return <SpotifyIcon size={size} />;
+    default:
+      return <GlobeIcon size={size} />;
+  }
 }
 
 export const HistoryItemCard: FC<HistoryItemCardProps> = ({
@@ -36,6 +72,8 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
   const [isRevealed, setIsRevealed] = useState<boolean>(!maskSecrets);
   const [copied, setCopied] = useState<boolean>(false);
   const [imageDimensions, setImageDimensions] = useState<string | null>(null);
+
+  const social = item.metadata?.socialLink;
 
   const handleCopy = async () => {
     if (typeof window !== 'undefined') {
@@ -62,9 +100,18 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
     }
   };
 
+  const handleOpenExternal = async (e: MouseEvent) => {
+    e.stopPropagation();
+    if (typeof window !== 'undefined' && window.clipOrbit?.openExternalUrl) {
+      await window.clipOrbit.openExternalUrl(item.content);
+    } else if (typeof window !== 'undefined') {
+      window.open(item.content, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   const isSensitive = Boolean(item.metadata?.isSensitive);
   const isMultiLine =
-    item.type !== 'image' && (item.content.includes('\n') || item.content.length > 120);
+    item.type !== 'image' && !social && (item.content.includes('\n') || item.content.length > 120);
 
   const getTypeIcon = () => {
     switch (item.type) {
@@ -108,23 +155,47 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
       data-clip-id={item.id}
       className={`clip-card ${item.isPinned ? 'clip-card-pinned' : ''} ${
         isSensitive ? 'clip-card-sensitive' : ''
-      }`}
-      aria-label={`${getTypeLabel()} copied from ${item.sourceApp}`}
+      } ${social ? 'clip-card-social-wrapper' : ''}`}
+      aria-label={`${social ? social.platform : getTypeLabel()} copied from ${item.sourceApp}`}
     >
       {/* Card Header: Metadata badges & Contextual Actions */}
       <div className="clip-card-header">
         <div className="clip-card-tags">
-          <Badge
-            variant={item.type === 'link' ? 'accent' : item.type === 'code' ? 'neutral' : 'default'}
-            size="sm"
-            icon={getTypeIcon()}
-          >
-            {getTypeLabel()}
-          </Badge>
+          {social ? (
+            <span
+              className="clip-social-pill"
+              style={{
+                backgroundColor: social.theme.badgeBg,
+                borderColor: social.theme.badgeBorder,
+                color: social.theme.badgeText,
+              }}
+            >
+              {getPlatformIcon(social.platformId, 12)}
+              <span>{social.platform}</span>
+            </span>
+          ) : (
+            <Badge
+              variant={item.type === 'link' ? 'accent' : item.type === 'code' ? 'neutral' : 'default'}
+              size="sm"
+              icon={getTypeIcon()}
+            >
+              {getTypeLabel()}
+            </Badge>
+          )}
 
           <span className="clip-source-app">{item.sourceApp}</span>
 
-          {item.metadata?.domain && <span className="clip-meta-tag">{item.metadata.domain}</span>}
+          {social ? (
+            <span className="clip-social-category-tag" title={social.category}>
+              {social.category}
+            </span>
+          ) : item.metadata?.domain ? (
+            <span className="clip-meta-tag">{item.metadata.domain}</span>
+          ) : null}
+
+          {social?.contentType && (
+            <span className="clip-content-type-badge">{social.contentType}</span>
+          )}
 
           {(imageDimensions || item.metadata?.dimensions) && (
             <span className="clip-meta-tag">{imageDimensions || item.metadata?.dimensions}</span>
@@ -212,6 +283,55 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
               }}
             />
           </div>
+        ) : social ? (
+          /* Smart Social Media & Web Link Intelligence Card */
+          <div className="clip-social-card">
+            <div className="clip-social-card-top">
+              <div className="clip-social-identity">
+                <span
+                  className="clip-social-icon-wrapper"
+                  style={{
+                    color: social.theme.primary,
+                    background: social.theme.badgeBg,
+                    borderColor: social.theme.badgeBorder,
+                  }}
+                >
+                  {getPlatformIcon(social.platformId, 16)}
+                </span>
+                <div className="clip-social-info">
+                  <div className="clip-social-title-row">
+                    <span className="clip-social-brand">{social.platform}</span>
+                    <span className="clip-social-kind">{social.category}</span>
+                  </div>
+                  {social.pathSummary && (
+                    <span className="clip-social-path">{social.pathSummary}</span>
+                  )}
+                </div>
+              </div>
+              <span className="clip-social-type-pill">{social.contentType}</span>
+            </div>
+
+            {/* Contextual Description */}
+            <div className="clip-social-desc-box">
+              <p className="clip-social-desc">{social.description}</p>
+            </div>
+
+            {/* URL Row with Open Action */}
+            <div className="clip-social-url-row">
+              <span className="clip-social-url-text" title={item.content}>
+                {item.content}
+              </span>
+              <button
+                type="button"
+                onClick={handleOpenExternal}
+                className="clip-social-open-btn"
+                title="Open in default browser"
+              >
+                <ExternalLinkIcon size={12} />
+                <span>Open Link</span>
+              </button>
+            </div>
+          </div>
         ) : item.type === 'code' ? (
           <pre
             className={`clip-content-code ${
@@ -248,6 +368,11 @@ export const HistoryItemCard: FC<HistoryItemCardProps> = ({
           )}
           {typeof item.metadata?.wordCount === 'number' && (
             <span className="clip-word-count">• {item.metadata.wordCount} words</span>
+          )}
+          {social && (
+            <span className="clip-social-origin-badge">
+              {social.isSocial ? 'Verified Platform Link' : 'Web Link'}
+            </span>
           )}
         </div>
 

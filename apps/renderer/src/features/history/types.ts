@@ -1,3 +1,5 @@
+import type { SocialLinkInfo } from '@cliporbit/contracts';
+
 export type ClipboardContentType = 'text' | 'link' | 'code' | 'command' | 'email' | 'image';
 
 export type CategoryFilterType = 'all' | 'text' | 'link' | 'code' | 'image';
@@ -12,6 +14,7 @@ export interface ClipboardItemMetadata {
   isSensitive?: boolean;
   sensitiveReason?: string;
   dimensions?: string;
+  socialLink?: SocialLinkInfo;
 }
 
 export interface ClipboardItem {
