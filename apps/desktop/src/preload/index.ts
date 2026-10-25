@@ -17,6 +17,7 @@ import type {
 // In sandboxed preload, keep imports type-only to avoid runtime node_modules resolution
 const CHANNELS = {
   DESKTOP_INFO: 'app:get-desktop-info',
+  OPEN_EXTERNAL_URL: 'app:open-external-url',
   START_CAPTURE: 'clipboard:start',
   PAUSE_CAPTURE: 'clipboard:pause',
   RESUME_CAPTURE: 'clipboard:resume',
@@ -269,6 +270,15 @@ const desktopBridge: DesktopBridge = {
       return (await ipcRenderer.invoke(CHANNELS.SNIPPETS_DELETE, id)) as boolean;
     } catch (err) {
       console.error('[ClipOrbit Preload] Failed to delete snippet:', err);
+      return false;
+    }
+  },
+
+  openExternalUrl: async (url: string): Promise<boolean> => {
+    try {
+      return (await ipcRenderer.invoke(CHANNELS.OPEN_EXTERNAL_URL, url)) as boolean;
+    } catch (err) {
+      console.error('[ClipOrbit Preload] Failed to open external URL:', err);
       return false;
     }
   },

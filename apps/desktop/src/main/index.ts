@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
 import path from 'path';
 import { IPC_CHANNELS, SETTING_KEYS, type DesktopInfo } from '@cliporbit/contracts';
 import { createAppSettingRepository } from '@cliporbit/database';
@@ -74,6 +74,40 @@ function handleGetDesktopInfo(event: IpcMainInvokeEvent): DesktopInfo {
 }
 
 /**
+ * Safely opens a validated external HTTP/HTTPS URL in the default system browser.
+ */
+async function handleOpenExternalUrl(
+  event: IpcMainInvokeEvent,
+  targetUrl: unknown,
+): Promise<boolean> {
+  if (!isAuthorizedSender(event)) {
+    console.warn(
+      '[ClipOrbit Main] Security Warning: Rejected unauthorized open external request from sender URL:',
+      event.senderFrame?.url || '<unknown>',
+    );
+    throw new Error('Unauthorized IPC sender origin or frame.');
+  }
+
+  if (typeof targetUrl !== 'string' || !targetUrl.trim()) {
+    return false;
+  }
+
+  const trimmed = targetUrl.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      await shell.openExternal(parsed.toString());
+      return true;
+    }
+  } catch (err) {
+    console.warn('[ClipOrbit Main] Invalid URL rejected for openExternalUrl:', targetUrl, err);
+    return false;
+  }
+
+  return false;
+}
+
+/**
  * Registers all secure IPC handlers prior to window creation.
  * Idempotent: safe against duplicate invocation.
  */
@@ -84,6 +118,7 @@ function registerIpcHandlers(): void {
   ipcRegistered = true;
 
   ipcMain.handle(IPC_CHANNELS.APP_GET_DESKTOP_INFO, handleGetDesktopInfo);
+  ipcMain.handle(IPC_CHANNELS.APP_OPEN_EXTERNAL_URL, handleOpenExternalUrl);
   registerClipboardIpcHandlers({
     isAuthorized: isAuthorizedSender,
     isShutdown: () =>
@@ -204,6 +239,18 @@ function createWindow(): BrowserWindow {
       sandbox: true,
       preload: preloadPath,
     },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        void shell.openExternal(url);
+      }
+    } catch {
+      // Ignore malformed URLs
+    }
+    return { action: 'deny' };
   });
 
   if (isDev) {
