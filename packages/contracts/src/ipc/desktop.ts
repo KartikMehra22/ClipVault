@@ -47,10 +47,12 @@ export interface DesktopBridge {
   createSnippet(input: CreateSnippetInputDto): Promise<SnippetMutationResult>;
   updateSnippet(input: UpdateSnippetInputDto): Promise<SnippetMutationResult>;
   deleteSnippet(id: string): Promise<boolean>;
+  openExternalUrl?(url: string): Promise<boolean>;
 }
 
 export const IPC_CHANNELS = {
   APP_GET_DESKTOP_INFO: 'app:get-desktop-info',
+  APP_OPEN_EXTERNAL_URL: 'app:open-external-url',
   CLIPBOARD_START: 'clipboard:start',
   CLIPBOARD_PAUSE: 'clipboard:pause',
   CLIPBOARD_RESUME: 'clipboard:resume',
